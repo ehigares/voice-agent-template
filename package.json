@@ -1,0 +1,49 @@
+{
+  "name": "voice-agent-template",
+  "version": "1.0.0",
+  "description": "Production-ready template for building AI-powered phone agents with a 7-layer architecture",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "setup": "tsx scripts/setup.ts",
+    "create-agent": "tsx scripts/seed.ts",
+    "seed": "tsx scripts/seed.ts",
+    "seed-knowledge": "tsx scripts/seed-knowledge.ts"
+  },
+  "keywords": [
+    "voice-agent",
+    "ai-phone",
+    "vapi",
+    "telnyx",
+    "n8n",
+    "claude",
+    "deepgram",
+    "cartesia"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@pinecone-database/pinecone": "^4.0.0",
+    "@supabase/supabase-js": "^2.47.0",
+    "@vapi-ai/server-sdk": "^0.2.0",
+    "assemblyai": "^4.8.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "mem0ai": "^1.0.0",
+    "openai": "^4.73.0",
+    "telnyx": "^6.13.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

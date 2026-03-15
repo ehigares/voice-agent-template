@@ -1,0 +1,57 @@
+{
+  "name": "Voice Agent — CRM Update",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [250, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crm-update",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson"
+      }
+    },
+    {
+      "id": "update-crm",
+      "name": "Update CRM Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-crm-api.com/contacts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ phone: $json.body.phone_number, name: $json.body.caller_name, email: $json.body.email, last_interaction: $json.body.call_ended_at, notes: $json.body.summary }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "log-interaction",
+      "name": "Log CRM Interaction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [750, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-crm-api.com/interactions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ contact_phone: $json.body.phone_number, type: 'phone_call', direction: $json.body.direction || 'inbound', duration: $json.body.duration_seconds, outcome: $json.body.outcome, transcript_summary: $json.body.summary }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{ "node": "Update CRM Contact", "type": "main", "index": 0 }]]
+    },
+    "Update CRM Contact": {
+      "main": [[{ "node": "Log CRM Interaction", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}
