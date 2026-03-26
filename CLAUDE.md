@@ -213,6 +213,22 @@ Both must be configured. Never rely on just one.
 
 ---
 
+## Session End Protocol
+
+At the end of every session, before stopping, always:
+
+1. Update `dev_journal.md` — mark completed phase items with [x],
+   add a change log entry summarizing what was done
+2. Stage all changes: `git add -A`
+3. Commit with a descriptive message:
+   `git commit -m "phase-N: brief description of what was done"`
+4. Push to GitHub: `git push origin main`
+5. Confirm the push succeeded before ending the session
+
+Do not consider a session complete until the push is confirmed.
+
+---
+
 ## DO NOT
 
 - Modify `reference-agent.ts` — read it, never write to it

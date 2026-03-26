@@ -1,8 +1,22 @@
+import { config } from '../../config.js';
 import { searchKnowledge as search } from '../memory/vector-search.js';
+import { withTimeout } from './tool-utils.js';
 import type { ToolResult } from '../../types/index.js';
 
+const FALLBACK_MSG = "I wasn't able to search our information right now. Let me try to help you another way.";
+
 export async function searchKnowledge(query: string): Promise<ToolResult> {
-  try {
+  if (!config.ENABLE_PINECONE) {
+    return {
+      success: true,
+      data: {
+        found: false,
+        message: 'Knowledge base search is not enabled.',
+      },
+    };
+  }
+
+  return withTimeout(5000, FALLBACK_MSG, async () => {
     const results = await search(query, 5);
 
     if (results.length === 0) {
@@ -26,8 +40,5 @@ export async function searchKnowledge(query: string): Promise<ToolResult> {
         })),
       },
     };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, data: {}, error: `Knowledge search failed: ${message}` };
-  }
+  });
 }

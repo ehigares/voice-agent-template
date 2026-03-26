@@ -5,6 +5,7 @@ export const TOOL_NAMES = {
   SEARCH_KNOWLEDGE: 'search-knowledge',
   CHECK_AVAILABILITY: 'check-availability',
   BOOK_APPOINTMENT: 'book-appointment',
+  TRANSFER_TO_HUMAN: 'transfer-to-human',
 } as const;
 
 export type ToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -103,6 +104,25 @@ export function getToolDefinitions(webhookUrl: string): VapiToolConfig[] {
             },
           },
           required: ['date', 'time', 'caller_name', 'phone_number'],
+        },
+      },
+      server: { url: webhookUrl },
+    },
+    {
+      type: 'function',
+      function: {
+        name: TOOL_NAMES.TRANSFER_TO_HUMAN,
+        description:
+          'Transfer the call to a human team member. Use when the caller requests a human, is upset, or has a request beyond your capabilities.',
+        parameters: {
+          type: 'object',
+          properties: {
+            reason: {
+              type: 'string',
+              description: 'Brief reason for the transfer (e.g. "caller requested human", "complex billing issue")',
+            },
+          },
+          required: [],
         },
       },
       server: { url: webhookUrl },

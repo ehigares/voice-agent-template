@@ -1,5 +1,7 @@
+import { logger } from '../../lib/logger.js';
+import { config } from '../../config.js';
 import { insertCall, upsertCaller, insertTranscript, insertTrainingData } from '../memory/queries.js';
-import { addMemory } from '../memory/mem0-client.js';
+import { memoryClient } from '../memory/memory-client.js';
 import { generateEmbedding } from '../memory/vector-search.js';
 import { uploadRecording } from './s3-upload.js';
 import { transcribeRecording, type TranscriptSegment } from './transcribe.js';
@@ -20,7 +22,7 @@ interface CallEndedData {
 }
 
 export async function processCallEnd(data: CallEndedData): Promise<void> {
-  console.log(`[pipeline] Processing call ${data.call_id}`);
+  logger.info('pipeline', `Processing call ${data.call_id}`, { callId: data.call_id });
 
   // Step 1: Save call record
   let callRecord;
@@ -40,14 +42,18 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
       duration_seconds: Math.round(durationMs / 1000),
       recording_url: data.recording_url ?? null,
       s3_key: null,
+      recording_archived: false,
       cost_cents: null,
       agent_id: data.agent_id ?? null,
       caller_id: null,
       metadata: { ended_reason: data.ended_reason },
     });
-    console.log(`[pipeline] Saved call record: ${callRecord.id}`);
+    logger.info('pipeline', `Saved call record: ${callRecord.id}`, { callId: data.call_id });
   } catch (err) {
-    console.error('[pipeline] Failed to save call record:', err);
+    logger.error('pipeline', 'Failed to save call record', {
+      callId: data.call_id,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return;
   }
 
@@ -56,18 +62,35 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
     const caller = await upsertCaller(data.phone_number, {
       last_call_at: data.started_at,
     });
-    console.log(`[pipeline] Upserted caller: ${caller.id}`);
+    logger.info('pipeline', `Upserted caller: ${caller.id}`, { callId: data.call_id });
   } catch (err) {
-    console.error('[pipeline] Failed to upsert caller:', err);
+    logger.error('pipeline', 'Failed to upsert caller', {
+      callId: data.call_id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // Step 3: Upload recording to S3
   if (data.recording_url) {
     try {
       const s3Key = await uploadRecording(data.call_id, data.recording_url);
-      console.log(`[pipeline] Uploaded to S3: ${s3Key}`);
+      // Mark recording as archived
+      try {
+        const { updateCall } = await import('../memory/queries.js');
+        await updateCall(callRecord.id, {
+          s3_key: s3Key,
+          recording_archived: true,
+          recording_archived_at: new Date().toISOString(),
+        });
+      } catch {
+        // Non-critical — s3Key is still stored
+      }
+      logger.info('pipeline', `Uploaded to S3: ${s3Key}`, { callId: data.call_id });
     } catch (err) {
-      console.error('[pipeline] Failed to upload recording:', err);
+      logger.error('pipeline', 'Failed to upload recording', {
+        callId: data.call_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -76,9 +99,12 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
   if (data.recording_url) {
     try {
       segments = await transcribeRecording(data.recording_url);
-      console.log(`[pipeline] Transcribed ${segments.length} segments`);
+      logger.info('pipeline', `Transcribed ${segments.length} segments`, { callId: data.call_id });
     } catch (err) {
-      console.error('[pipeline] Failed to transcribe:', err);
+      logger.error('pipeline', 'Failed to transcribe', {
+        callId: data.call_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -86,8 +112,10 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
   for (const segment of segments) {
     try {
       let embedding: number[] | null = null;
+      let embeddingModel: string | null = null;
       try {
         embedding = await generateEmbedding(segment.text);
+        embeddingModel = config.EMBEDDING_MODEL;
       } catch {
         // Embeddings are optional — continue without them
       }
@@ -98,9 +126,13 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
         start_ms: segment.start_ms,
         end_ms: segment.end_ms,
         embedding,
+        embedding_model: embeddingModel,
       });
     } catch (err) {
-      console.error('[pipeline] Failed to save transcript segment:', err);
+      logger.error('pipeline', 'Failed to save transcript segment', {
+        callId: data.call_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -108,7 +140,9 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
   const fullTranscript =
     data.transcript ?? segments.map((s) => `${s.speaker}: ${s.text}`).join('\n');
   const tagResult = autoTag(fullTranscript);
-  console.log(`[pipeline] Tags: ${tagResult.tags.join(', ')} | Sentiment: ${tagResult.sentimentScore}`);
+  logger.info('pipeline', `Tags: ${tagResult.tags.join(', ')} | Sentiment: ${tagResult.sentimentScore}`, {
+    callId: data.call_id,
+  });
 
   // Step 7: Score
   const durationSeconds = callRecord.duration_seconds ?? 0;
@@ -117,13 +151,15 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
     outcome: tagResult.outcome,
     sentimentScore: tagResult.sentimentScore,
   });
-  console.log(`[pipeline] Quality score: ${scoreResult.qualityScore}`);
+  logger.info('pipeline', `Quality score: ${scoreResult.qualityScore}`, { callId: data.call_id });
 
   // Step 8: Save training data
   try {
     let embedding: number[] | null = null;
+    let embeddingModel: string | null = null;
     try {
       embedding = await generateEmbedding(fullTranscript);
+      embeddingModel = config.EMBEDDING_MODEL;
     } catch {
       // Embeddings are optional
     }
@@ -137,25 +173,34 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
       outcome: tagResult.outcome,
       notes: scoreResult.notes,
       embedding,
+      embedding_model: embeddingModel,
     });
-    console.log(`[pipeline] Saved training data`);
+    logger.info('pipeline', 'Saved training data', { callId: data.call_id });
   } catch (err) {
-    console.error('[pipeline] Failed to save training data:', err);
+    logger.error('pipeline', 'Failed to save training data', {
+      callId: data.call_id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
-  // Step 9: Add to Mem0 caller memory (non-critical)
-  try {
-    const callerSummary = segments
-      .filter((s) => s.speaker === 'caller')
-      .map((s) => s.text)
-      .join(' ');
-    if (callerSummary.length > 20) {
-      await addMemory(data.phone_number, callerSummary);
-      console.log(`[pipeline] Added caller memory for ${data.phone_number}`);
+  // Step 9: Add to Mem0 caller memory (non-critical, gated by feature flag)
+  if (config.ENABLE_MEM0) {
+    try {
+      const callerSummary = segments
+        .filter((s) => s.speaker === 'caller')
+        .map((s) => s.text)
+        .join(' ');
+      if (callerSummary.length > 20) {
+        await memoryClient.addMemory(data.phone_number, callerSummary);
+        logger.info('pipeline', `Added caller memory`, { callId: data.call_id });
+      }
+    } catch (err) {
+      logger.warn('pipeline', 'Failed to add Mem0 memory (non-critical)', {
+        callId: data.call_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-  } catch (err) {
-    console.warn('[pipeline] Failed to add Mem0 memory (non-critical):', err);
   }
 
-  console.log(`[pipeline] Completed processing call ${data.call_id}`);
+  logger.info('pipeline', `Completed processing call ${data.call_id}`, { callId: data.call_id });
 }

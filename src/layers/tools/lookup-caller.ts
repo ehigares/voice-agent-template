@@ -1,17 +1,25 @@
+import { logger } from '../../lib/logger.js';
 import { getCaller } from '../memory/queries.js';
-import { getMemories } from '../memory/mem0-client.js';
+import { memoryClient } from '../memory/memory-client.js';
+import { config } from '../../config.js';
+import { withTimeout } from './tool-utils.js';
 import type { ToolResult } from '../../types/index.js';
 
+const FALLBACK_MSG = "I wasn't able to look up your information right now, but I'm happy to help you.";
+
 export async function lookupCaller(phoneNumber: string): Promise<ToolResult> {
-  try {
+  return withTimeout(5000, FALLBACK_MSG, async () => {
     const caller = await getCaller(phoneNumber);
 
-    let memories: { memory: string; id: string }[] = [];
-    if (caller?.mem0_user_id) {
+    let memories: string[] = [];
+    if (caller?.mem0_user_id && config.ENABLE_MEM0) {
       try {
-        memories = await getMemories(caller.mem0_user_id);
+        const mems = await memoryClient.getMemories(caller.mem0_user_id);
+        memories = mems.map((m) => m.memory);
       } catch (err) {
-        console.warn('Mem0 lookup failed (non-critical):', err);
+        logger.warn('lookup-caller', 'Mem0 lookup failed (non-critical)', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -35,11 +43,8 @@ export async function lookupCaller(phoneNumber: string): Promise<ToolResult> {
         lastCallAt: caller.last_call_at,
         tags: caller.tags,
         notes: caller.notes,
-        memories: memories.map((m) => m.memory),
+        memories,
       },
     };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, data: {}, error: `Caller lookup failed: ${message}` };
-  }
+  });
 }

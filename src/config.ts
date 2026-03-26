@@ -25,20 +25,37 @@ const configSchema = z.object({
   // Layer 6 — Memory
   SUPABASE_URL: z.string().url('SUPABASE_URL must be a valid URL'),
   SUPABASE_SERVICE_KEY: z.string().min(1, 'SUPABASE_SERVICE_KEY is required'),
+
+  // Feature flags — per-client opt-out for optional services
+  ENABLE_PINECONE: z
+    .string()
+    .transform((v) => v !== 'false')
+    .default('true'),
+  ENABLE_MEM0: z
+    .string()
+    .transform((v) => v !== 'false')
+    .default('true'),
+
   PINECONE_API_KEY: z.string().optional().default(''),
   PINECONE_INDEX: z.string().default('voice-agent'),
-  OPENAI_API_KEY: z.string().optional().default(''),
   MEM0_API_KEY: z.string().optional().default(''),
+
+  // Embeddings
+  OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required — used for embeddings'),
+  EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
+  EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
 
   // Layer 7 — Training
   AWS_ACCESS_KEY_ID: z.string().optional().default(''),
   AWS_SECRET_ACCESS_KEY: z.string().optional().default(''),
   AWS_REGION: z.string().default('us-east-1'),
   S3_BUCKET: z.string().default('voice-agent-recordings'),
+  STORAGE_ENDPOINT: z.string().optional().default(''),
   ASSEMBLYAI_API_KEY: z.string().optional().default(''),
 
   // Server
   WEBHOOK_PORT: z.coerce.number().default(3000),
+  MAX_CONCURRENT_CALLS: z.coerce.number().default(20),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 });
 
@@ -51,8 +68,9 @@ function loadConfig(): Config {
     const errors = result.error.issues
       .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
       .join('\n');
-    console.error(`\n❌ Invalid environment configuration:\n${errors}\n`);
-    console.error('Copy .env.example to .env and fill in your API keys.\n');
+    // Logger is not available yet at config load time — use stderr directly
+    process.stderr.write(`\n❌ Invalid environment configuration:\n${errors}\n`);
+    process.stderr.write('Copy .env.example to .env and fill in your API keys.\n\n');
     process.exit(1);
   }
 

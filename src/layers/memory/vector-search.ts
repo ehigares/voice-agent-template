@@ -17,8 +17,9 @@ function getOpenAI(): OpenAI {
 export async function generateEmbedding(text: string): Promise<number[]> {
   const openai = getOpenAI();
   const response = await openai.embeddings.create({
-    model: 'text-embedding-3-small',
+    model: config.EMBEDDING_MODEL,
     input: text,
+    dimensions: config.EMBEDDING_DIMENSIONS,
   });
   return response.data[0].embedding;
 }

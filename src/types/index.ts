@@ -62,6 +62,8 @@ export interface Call {
   duration_seconds: number | null;
   recording_url: string | null;
   s3_key: string | null;
+  recording_archived: boolean;
+  recording_archived_at: string | null;
   cost_cents: number | null;
   metadata: Record<string, unknown>;
   created_at: string;
@@ -75,6 +77,7 @@ export interface Transcript {
   start_ms: number;
   end_ms: number;
   embedding: number[] | null;
+  embedding_model: string | null;
   created_at: string;
 }
 
@@ -88,6 +91,7 @@ export interface TrainingData {
   outcome: CallOutcome | null;
   notes: string | null;
   embedding: number[] | null;
+  embedding_model: string | null;
   created_at: string;
 }
 

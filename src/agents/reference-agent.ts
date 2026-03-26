@@ -151,7 +151,7 @@ export class ReferenceAgent extends BaseAgentBuilder {
         TOOL_NAMES.SEARCH_KNOWLEDGE,
         TOOL_NAMES.CHECK_AVAILABILITY,
         TOOL_NAMES.BOOK_APPOINTMENT,
-        // TOOL_NAMES.TRANSFER_TO_HUMAN,  // uncomment after Phase 2
+        TOOL_NAMES.TRANSFER_TO_HUMAN,
       ],
 
       // TODO:CONFIGURE — Webhook URL where Vapi sends events and tool calls.

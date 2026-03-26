@@ -1,5 +1,8 @@
 import { triggerWebhook } from '../automation/n8n-client.js';
+import { withTimeout } from './tool-utils.js';
 import type { ToolResult } from '../../types/index.js';
+
+const FALLBACK_MSG = "I'm having trouble booking right now. Let me take your details and have someone confirm your appointment shortly.";
 
 interface BookingParams {
   date: string;
@@ -10,7 +13,7 @@ interface BookingParams {
 }
 
 export async function bookAppointment(params: BookingParams): Promise<ToolResult> {
-  try {
+  return withTimeout(5000, FALLBACK_MSG, async () => {
     const result = await triggerWebhook('appointment-booking', {
       action: 'book',
       ...params,
@@ -27,12 +30,5 @@ export async function bookAppointment(params: BookingParams): Promise<ToolResult
         message: result.message ?? `Appointment booked for ${params.date} at ${params.time}.`,
       },
     };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return {
-      success: false,
-      data: {},
-      error: `Booking failed: ${message}`,
-    };
-  }
+  });
 }

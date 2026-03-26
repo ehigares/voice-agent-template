@@ -5,11 +5,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: voice_agent
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      # Create both databases on first run
+      POSTGRES_DB: voice_agent
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -25,13 +27,15 @@ services:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: 5432
-      DB_POSTGRESDB_DATABASE: voice_agent
+      # n8n uses its own database — separate from application data.
+      # This isolates n8n credential storage from caller PII.
+      DB_POSTGRESDB_DATABASE: n8n_db
       DB_POSTGRESDB_USER: postgres
       DB_POSTGRESDB_PASSWORD: postgres
       N8N_BASIC_AUTH_ACTIVE: "true"
       N8N_BASIC_AUTH_USER: admin
       N8N_BASIC_AUTH_PASSWORD: admin
-      WEBHOOK_URL: http://localhost:5678
+      WEBHOOK_URL: ${N8N_PUBLIC_URL:-http://localhost:5678}
     volumes:
       - n8n-data:/home/node/.n8n
     depends_on:

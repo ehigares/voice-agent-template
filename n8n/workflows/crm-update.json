@@ -26,7 +26,13 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ phone: $json.body.phone_number, name: $json.body.caller_name, email: $json.body.email, last_interaction: $json.body.call_ended_at, notes: $json.body.summary }) }}",
-        "options": {}
+        "options": {
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
       }
     },
     {
@@ -41,7 +47,13 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ contact_phone: $json.body.phone_number, type: 'phone_call', direction: $json.body.direction || 'inbound', duration: $json.body.duration_seconds, outcome: $json.body.outcome, transcript_summary: $json.body.summary }) }}",
-        "options": {}
+        "options": {
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
       }
     }
   ],

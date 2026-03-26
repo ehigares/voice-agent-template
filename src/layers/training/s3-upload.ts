@@ -1,5 +1,6 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { config } from '../../config.js';
+import { logger } from '../../lib/logger.js';
 
 let s3Instance: S3Client | null = null;
 
@@ -14,6 +15,8 @@ function getS3(): S3Client {
         accessKeyId: config.AWS_ACCESS_KEY_ID,
         secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
       },
+      // STORAGE_ENDPOINT enables MinIO for local dev or custom S3-compatible stores
+      ...(config.STORAGE_ENDPOINT ? { endpoint: config.STORAGE_ENDPOINT, forcePathStyle: true } : {}),
     });
   }
   return s3Instance;
@@ -41,6 +44,6 @@ export async function uploadRecording(
     })
   );
 
-  console.log(`[s3] Uploaded recording: ${s3Key}`);
+  logger.info('s3', `Uploaded recording: ${s3Key}`, { callId });
   return s3Key;
 }
