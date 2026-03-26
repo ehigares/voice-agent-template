@@ -546,6 +546,42 @@ STATUS: COMPLETE
   6. CLAUDE.md extra blank lines in Session End Protocol → cleaned up
 - npm run build: zero errors.
 
+### [Template Hardening — pre-review audit fixes]
+- Fix 1: Added POST /pipeline/process route to webhook-handler.ts.
+  n8n call-ended workflow now has an endpoint to call back into the
+  webhook server for post-call processing (transcribe, tag, score).
+- Fix 2: Rewrote docker/init-db.sql to be idempotent using
+  SELECT ... \gexec pattern. Bare CREATE DATABASE fails on restart.
+- Fix 3: Fixed workflow_errors schema — renamed `context` to `metadata`,
+  added `level TEXT DEFAULT 'error'` column. Updated 009 migration and
+  created 010 migration for databases where 009 already ran.
+- Fix 4: Added TODO:CONFIGURE to speaker mapping in transcribe.ts with
+  explanation of telephony dependency. Did NOT silently swap A/B —
+  correct mapping depends on Vapi recording start behavior per client.
+- Fix 5: Pipeline now uses S3 URL for transcription after successful
+  upload, falling back to Vapi recording URL if upload fails. S3 URLs
+  are permanent; Vapi URLs expire.
+- Fix 6: Gated n8n health probe on N8N_API_KEY. Without a key the
+  probe always fails, producing false "down" alerts.
+- Fix 7: Added 10-second health check cache. Avoids hammering downstream
+  services on rapid health checks. 10s (not 30s) to avoid stale results
+  during Railway zero-downtime deploys.
+- Fix 8: Moved dynamic import() of updateCall in pipeline.ts to static
+  import at top of file. Cleaner, no runtime overhead.
+- Fix 9: Fixed CLAUDE.md backchannel example — replaced nonexistent
+  vapiClient.sendBackchannel() with actual fetch pattern from
+  webhook-handler.ts.
+- Fix 10: Replaced hardcoded http://localhost:3000 in call-ended.json
+  with ={{ $env.WEBHOOK_BASE_URL }}. Added WEBHOOK_BASE_URL to
+  .env.example. Synced n8n/workflows/ backup. Critical template fix —
+  any cloned repo pointing to localhost in n8n never works in production.
+- Fix 11: Created CHECKLIST.md — definitive deployment checklist in 3
+  sections (minimum for calls, full feature set, go-live). Added to
+  CLAUDE.md "Starting a New Client Build" as step 2.
+- Verification: npm run build zero errors, grep TODO:CONFIGURE shows
+  all expected markers, grep localhost:3000 returns zero results in
+  src/, n8n/, scripts/.
+
 ### [Pre-Phase 4 — custom-tool-template.ts rewrite]
 - Rewrote custom-tool-template.ts from stub (empty function body with
   commented-out patterns) to a fully working checkLoyaltyPoints example.
