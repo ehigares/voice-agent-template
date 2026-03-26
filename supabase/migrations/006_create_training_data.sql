@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS training_data (
   quality_score    FLOAT,
   outcome          TEXT,
   notes            TEXT,
+  -- Dimension matches text-embedding-3-small (1536). If using a different
+  -- model, create a new migration to ALTER this column. See EMBEDDING_DIMENSIONS in .env.example.
   embedding        VECTOR(1536),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

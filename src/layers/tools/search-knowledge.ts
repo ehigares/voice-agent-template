@@ -16,7 +16,7 @@ export async function searchKnowledge(query: string): Promise<ToolResult> {
     };
   }
 
-  return withTimeout(5000, FALLBACK_MSG, async () => {
+  return withTimeout(5000, FALLBACK_MSG, async (_signal) => {
     const results = await search(query, 5);
 
     if (results.length === 0) {

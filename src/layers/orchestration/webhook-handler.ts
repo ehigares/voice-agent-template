@@ -55,8 +55,11 @@ function verifyHmac(req: Request): boolean {
 }
 
 // ---- Concurrency Cap ----
+// Track active calls by unique call ID, not request count.
+// This prevents counting multiple function-call webhooks for the same
+// call as separate concurrent calls.
 
-let activeCalls = 0;
+const activeCallIds = new Set<string>();
 
 // ---- Deep Health Check ----
 
@@ -188,7 +191,7 @@ app.get('/health', async (_req: Request, res: Response) => {
     status,
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version ?? '0.0.0',
-    activeCalls,
+    activeCalls: activeCallIds.size,
     maxConcurrentCalls: config.MAX_CONCURRENT_CALLS,
     services,
   };
@@ -205,10 +208,15 @@ app.post('/webhook/vapi', async (req: Request, res: Response) => {
     return;
   }
 
-  // Concurrency cap
-  if (activeCalls >= config.MAX_CONCURRENT_CALLS) {
+  const body = req.body as VapiServerMessage;
+  const eventType = body.message?.type;
+  const callId = body.message?.call?.id;
+
+  // Concurrency cap — only reject new calls, not function-call events
+  // from calls already being tracked
+  if (callId && !activeCallIds.has(callId) && activeCallIds.size >= config.MAX_CONCURRENT_CALLS) {
     logger.warn('webhook', 'Concurrency limit reached', {
-      activeCalls,
+      activeCalls: activeCallIds.size,
       max: config.MAX_CONCURRENT_CALLS,
     });
     res.set('Retry-After', '5');
@@ -216,14 +224,19 @@ app.post('/webhook/vapi', async (req: Request, res: Response) => {
     return;
   }
 
-  activeCalls++;
   try {
-    const body = req.body as VapiServerMessage;
-    const eventType = body.message?.type;
-
     logger.info('webhook', `Received event: ${eventType}`);
 
     switch (eventType) {
+      case 'status-update': {
+        if (body.message?.status === 'in-progress' && callId) {
+          activeCallIds.add(callId);
+        }
+        logger.info('webhook', `Call status: ${body.message?.status}`);
+        res.json({ ok: true });
+        return;
+      }
+
       case 'function-call': {
         const response = await handleFunctionCall(body);
         res.json(response);
@@ -231,13 +244,10 @@ app.post('/webhook/vapi', async (req: Request, res: Response) => {
       }
 
       case 'end-of-call-report': {
+        if (callId) {
+          activeCallIds.delete(callId);
+        }
         await handleEndOfCall(body);
-        res.json({ ok: true });
-        return;
-      }
-
-      case 'status-update': {
-        logger.info('webhook', `Call status: ${body.message?.status}`);
         res.json({ ok: true });
         return;
       }
@@ -258,8 +268,6 @@ app.post('/webhook/vapi', async (req: Request, res: Response) => {
       error: err instanceof Error ? err.message : String(err),
     });
     res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    activeCalls--;
   }
 });
 
@@ -382,6 +390,17 @@ async function handleEndOfCall(body: VapiServerMessage): Promise<void> {
 
 // Called by n8n call-ended workflow — URL must match WEBHOOK_BASE_URL in .env
 app.post('/pipeline/process', async (req: Request, res: Response) => {
+  // Authenticate pipeline requests via shared secret
+  if (config.PIPELINE_SECRET) {
+    const header = req.headers['x-pipeline-secret'] as string | undefined;
+    if (header !== config.PIPELINE_SECRET) {
+      res.status(401).json({ error: 'Invalid pipeline secret' });
+      return;
+    }
+  } else if (config.NODE_ENV !== 'production') {
+    logger.warn('pipeline-route', 'PIPELINE_SECRET is not set — pipeline endpoint is unauthenticated');
+  }
+
   try {
     await processCallEnd(req.body);
     logger.info('pipeline-route', 'Pipeline processing complete', {

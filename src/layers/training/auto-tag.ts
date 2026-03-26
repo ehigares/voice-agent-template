@@ -6,8 +6,8 @@ export interface TagResult {
   outcome: CallOutcome;
 }
 
-// Keyword-based topic detection
-const TOPIC_KEYWORDS: Record<string, string[]> = {
+// Default keyword-based topic detection — override per client via autoTag() parameters
+const DEFAULT_TOPIC_KEYWORDS: Record<string, string[]> = {
   scheduling: ['appointment', 'schedule', 'book', 'reschedule', 'cancel', 'available', 'opening'],
   billing: ['bill', 'charge', 'payment', 'invoice', 'cost', 'price', 'insurance', 'copay'],
   support: ['problem', 'issue', 'broken', 'not working', 'error', 'help', 'fix', 'trouble'],
@@ -26,8 +26,8 @@ const NEGATIVE_WORDS = [
   'disappointed', 'unacceptable', 'ridiculous', 'complaint', 'problem', 'hate',
 ];
 
-// Outcome detection keywords
-const OUTCOME_KEYWORDS: Record<CallOutcome, string[]> = {
+// Default outcome detection keywords — override per client via autoTag() parameters
+const DEFAULT_OUTCOME_KEYWORDS: Record<CallOutcome, string[]> = {
   booked: ['booked', 'confirmed', 'scheduled', 'appointment set', 'see you'],
   resolved: ['resolved', 'fixed', 'solved', 'taken care of', 'all set'],
   escalated: ['transfer', 'manager', 'supervisor', 'specialist', 'call back', 'escalat'],
@@ -36,12 +36,17 @@ const OUTCOME_KEYWORDS: Record<CallOutcome, string[]> = {
   other: [],
 };
 
-export function autoTag(transcript: string): TagResult {
+export function autoTag(
+  transcript: string,
+  topicKeywords?: Record<string, string[]>,
+  outcomeKeywords?: Record<CallOutcome, string[]>,
+): TagResult {
   const lower = transcript.toLowerCase();
 
-  // Extract topics
+  // Extract topics — use client-provided keywords or defaults
+  const effectiveTopicKeywords = topicKeywords ?? DEFAULT_TOPIC_KEYWORDS;
   const tags: string[] = [];
-  for (const [topic, keywords] of Object.entries(TOPIC_KEYWORDS)) {
+  for (const [topic, keywords] of Object.entries(effectiveTopicKeywords)) {
     if (keywords.some((kw) => lower.includes(kw))) {
       tags.push(topic);
     }
@@ -58,9 +63,10 @@ export function autoTag(transcript: string): TagResult {
   const total = positiveCount + negativeCount;
   const sentimentScore = total === 0 ? 0 : (positiveCount - negativeCount) / total;
 
-  // Detect outcome
+  // Detect outcome — use client-provided keywords or defaults
+  const effectiveOutcomeKeywords = outcomeKeywords ?? DEFAULT_OUTCOME_KEYWORDS;
   let outcome: CallOutcome = 'other';
-  for (const [key, keywords] of Object.entries(OUTCOME_KEYWORDS)) {
+  for (const [key, keywords] of Object.entries(effectiveOutcomeKeywords)) {
     if (key === 'other') continue;
     if (keywords.some((kw) => lower.includes(kw))) {
       outcome = key as CallOutcome;

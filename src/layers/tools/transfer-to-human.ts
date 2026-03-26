@@ -14,7 +14,7 @@ export async function transferToHuman(
   callId: string,
   reason?: string
 ): Promise<ToolResult> {
-  return withTimeout(5000, FALLBACK_MSG, async () => {
+  return withTimeout(5000, FALLBACK_MSG, async (signal) => {
     if (!config.VAPI_API_KEY) {
       return {
         success: false,
@@ -28,6 +28,7 @@ export async function transferToHuman(
     // Vapi call control: send a "transfer" action
     const response = await fetch(`https://api.vapi.ai/call/${callId}/control`, {
       method: 'POST',
+      signal,
       headers: {
         Authorization: `Bearer ${config.VAPI_API_KEY}`,
         'Content-Type': 'application/json',

@@ -358,7 +358,7 @@ MEM0_API_KEY=
 
 # Embeddings
 OPENAI_API_KEY=               # REQUIRED — used for pgvector embeddings
-EMBEDDING_MODEL=text-embedding-ada-002
+EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536     # Must match EMBEDDING_MODEL output dimensions
 
 # Layer 7 — Training

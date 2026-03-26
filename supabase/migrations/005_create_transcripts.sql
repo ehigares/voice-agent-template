@@ -5,6 +5,8 @@ CREATE TABLE IF NOT EXISTS transcripts (
   content     TEXT NOT NULL,
   start_ms    INT NOT NULL DEFAULT 0,
   end_ms      INT NOT NULL DEFAULT 0,
+  -- Dimension matches text-embedding-3-small (1536). If using a different
+  -- model, create a new migration to ALTER this column. See EMBEDDING_DIMENSIONS in .env.example.
   embedding   VECTOR(1536),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

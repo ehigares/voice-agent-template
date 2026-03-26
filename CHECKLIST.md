@@ -19,7 +19,7 @@ Without any one of them, calls will fail.
 | `ANTHROPIC_API_KEY` | `.env` | LLM has no API key. Agent has no intelligence. |
 | `SUPABASE_URL` | `.env` | Database unreachable. Call records, callers, transcripts cannot be saved. |
 | `SUPABASE_SERVICE_KEY` | `.env` | Database authentication fails. Same impact as missing URL. |
-| `OPENAI_API_KEY` | `.env` | Embedding generation fails. Knowledge search and training pipeline broken. |
+| `OPENAI_API_KEY` | `.env` | Embedding generation fails. Knowledge search and training pipeline broken. If changing to a different embedding model, create a new migration to alter the VECTOR column dimensions in transcripts and training_data tables. |
 | `WEBHOOK_BASE_URL` | `.env` | n8n cannot call back into the webhook server. Post-call pipeline fails. |
 | System prompt | `src/agents/[client]-agent.ts` | Agent has no personality or business rules. Grep `TODO:CONFIGURE`. |
 | Voice ID | `src/agents/[client]-agent.ts` | Agent uses default voice. Grep `TODO:CONFIGURE`. |
@@ -70,5 +70,5 @@ This mirrors the production checklist in `DEPLOYMENT.md`.
 - [ ] `npm run validate` passes against production services
 - [ ] Test call completed successfully
 - [ ] `workflow_errors` table empty after test call
-- [ ] `grep -r "TODO:CONFIGURE" src/` returns zero results
+- [ ] `grep -r "TODO:CONFIGURE" src/` returns zero results (note: `custom-tool-template.ts` uses `TEMPLATE:CONFIGURE` markers which are separate and intentional — they should not appear in this grep)
 - [ ] `grep -r "localhost" src/ n8n/` returns zero results (no hardcoded URLs)

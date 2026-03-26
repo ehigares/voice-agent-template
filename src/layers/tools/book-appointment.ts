@@ -13,7 +13,7 @@ interface BookingParams {
 }
 
 export async function bookAppointment(params: BookingParams): Promise<ToolResult> {
-  return withTimeout(5000, FALLBACK_MSG, async () => {
+  return withTimeout(5000, FALLBACK_MSG, async (_signal) => {
     const result = await triggerWebhook('appointment-booking', {
       action: 'book',
       ...params,

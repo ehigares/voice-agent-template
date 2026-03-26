@@ -7,7 +7,7 @@ import { uploadRecording } from './s3-upload.js';
 import { transcribeRecording, type TranscriptSegment } from './transcribe.js';
 import { autoTag } from './auto-tag.js';
 import { scoreCall } from './score.js';
-import type { CallDirection } from '../../types/index.js';
+import type { CallDirection, CallOutcome } from '../../types/index.js';
 
 interface CallEndedData {
   call_id: string;
@@ -19,6 +19,8 @@ interface CallEndedData {
   transcript?: string;
   agent_id?: string;
   direction?: CallDirection;
+  topicKeywords?: Record<string, string[]>;
+  outcomeKeywords?: Record<CallOutcome, string[]>;
 }
 
 export async function processCallEnd(data: CallEndedData): Promise<void> {
@@ -148,7 +150,7 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
   // Step 6: Auto-tag
   const fullTranscript =
     data.transcript ?? segments.map((s) => `${s.speaker}: ${s.text}`).join('\n');
-  const tagResult = autoTag(fullTranscript);
+  const tagResult = autoTag(fullTranscript, data.topicKeywords, data.outcomeKeywords);
   logger.info('pipeline', `Tags: ${tagResult.tags.join(', ')} | Sentiment: ${tagResult.sentimentScore}`, {
     callId: data.call_id,
   });

@@ -163,6 +163,12 @@ For production clients at scale, a DigitalOcean droplet gives more
 control, better pricing at volume, and dedicated resources. This
 section is a step-by-step guide with commands you can copy and run.
 
+> **Security: Postgres password** — Before exposing any ports, change the
+> default postgres password in `docker-compose.yml` from `postgres` to a
+> strong generated password. Update all `DB_POSTGRESDB_PASSWORD` references
+> in the compose file to match. Never expose port 5432 publicly — ensure
+> UFW blocks it (`sudo ufw deny 5432`).
+
 ### Droplet sizing
 
 | Expected call volume | Droplet size | Monthly cost |

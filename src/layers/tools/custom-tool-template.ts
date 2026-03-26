@@ -2,6 +2,14 @@
 // custom-tool-template.ts — STARTER TEMPLATE FOR CLIENT TOOLS
 // ============================================================
 //
+// This file uses TEMPLATE:CONFIGURE markers instead of the standard
+// TODO-CONFIGURE markers used elsewhere in the codebase.
+// TEMPLATE:CONFIGURE = instructional placeholders in this template file.
+//   They guide you when copying this file to create a new tool.
+//   They are intentionally excluded from the pre-deploy grep check.
+// The standard markers in reference-agent.ts, transfer-to-human.ts, etc.
+//   are the ones that must be resolved before deployment.
+//
 // Copy this file when a client needs a tool not in the default set.
 // Rename it to match the tool's purpose (e.g. check-insurance.ts).
 //
@@ -23,12 +31,12 @@ import { logger } from '../../lib/logger.js';
 import { withTimeout } from './tool-utils.js';
 import type { ToolResult } from '../../types/index.js';
 
-// TODO:CONFIGURE — Friendly fallback message the caller hears if this tool
+// TEMPLATE:CONFIGURE — Friendly fallback message the caller hears if this tool
 // fails or times out. Keep it natural and non-alarming.
 const FALLBACK_MSG =
   "I'm sorry, I wasn't able to complete that right now. Let me connect you with someone who can help.";
 
-// TODO:CONFIGURE — Define the shape of your tool's input parameters.
+// TEMPLATE:CONFIGURE — Define the shape of your tool's input parameters.
 // These must match the JSON schema you register in tool-definitions.ts.
 // Use exact field names — Vapi passes them as-is from the LLM's function call.
 interface LoyaltyPointsInput {
@@ -36,7 +44,7 @@ interface LoyaltyPointsInput {
   program_id: string;     // Which loyalty program to query (clients may run multiple)
 }
 
-// TODO:CONFIGURE — Shape of the external API's response body.
+// TEMPLATE:CONFIGURE — Shape of the external API's response body.
 // Typing this separately lets TypeScript catch mismatches between what the
 // API returns and what you hand back to the LLM.
 interface LoyaltyApiResponse {
@@ -46,7 +54,7 @@ interface LoyaltyApiResponse {
 }
 
 /**
- * TODO:CONFIGURE — Rename this function to match your tool's purpose.
+ * TEMPLATE:CONFIGURE — Rename this function to match your tool's purpose.
  *
  * Example: checkLoyaltyPoints — looks up a caller's rewards balance
  * from an external loyalty API and returns it so the LLM can read the
@@ -60,15 +68,15 @@ interface LoyaltyApiResponse {
  * @returns ToolResult with points_balance, tier, and a message for the LLM
  */
 export async function checkLoyaltyPoints(input: LoyaltyPointsInput): Promise<ToolResult> {
-  return withTimeout(5000, FALLBACK_MSG, async () => {
-    // TODO:CONFIGURE — Replace this URL with the client's actual API endpoint.
+  return withTimeout(5000, FALLBACK_MSG, async (signal) => {
+    // TEMPLATE:CONFIGURE — Replace this URL with the client's actual API endpoint.
     // The URL, auth header, and body shape will vary per client.
     const apiUrl = 'https://api.example.com/v1/loyalty/lookup';
 
-    // TODO:CONFIGURE — Replace with the client's real API key, loaded from config.ts.
+    // TEMPLATE:CONFIGURE — Replace with the client's real API key, loaded from config.ts.
     // Example: const { config } = await import('../../config.js');
     //          then use config.LOYALTY_API_KEY below.
-    const apiKey = 'TODO:CONFIGURE';
+    const apiKey = 'TEMPLATE:CONFIGURE';
 
     // Log before the network call so we can see the attempt even if it times out
     logger.info('check-loyalty-points', 'Looking up loyalty points', {
@@ -77,8 +85,10 @@ export async function checkLoyaltyPoints(input: LoyaltyPointsInput): Promise<Too
     });
 
     // Make the external API call — fetch is globally available in Node 18+
+    // Pass the AbortSignal so the request is cancelled if withTimeout fires
     const response = await fetch(apiUrl, {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': 'application/json',
         // Bearer token auth is the most common pattern; swap for API-key header if needed

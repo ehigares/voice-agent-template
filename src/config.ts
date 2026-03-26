@@ -54,6 +54,9 @@ const configSchema = z.object({
   STORAGE_ENDPOINT: z.string().optional().default(''),
   ASSEMBLYAI_API_KEY: z.string().optional().default(''),
 
+  // Pipeline authentication
+  PIPELINE_SECRET: z.string().optional().default(''),
+
   // Transfer
   TRANSFER_PHONE_NUMBER: z.string().optional().default(''),
 

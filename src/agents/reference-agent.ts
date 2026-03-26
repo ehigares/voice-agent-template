@@ -189,6 +189,20 @@ export class ReferenceAgent extends BaseAgentBuilder {
         ],
       },
 
+      // TODO:CONFIGURE — Custom auto-tag keywords for the training pipeline.
+      // Override the default topic and outcome keyword lists to match this
+      // client's industry vocabulary. Pass these via agent config metadata,
+      // then pipeline.ts will forward them to autoTag().
+      //
+      // Example for a veterinary clinic:
+      //   metadata: {
+      //     topicKeywords: {
+      //       vaccination: ['vaccine', 'shot', 'booster', 'rabies'],
+      //       grooming: ['groom', 'bath', 'nail trim', 'haircut'],
+      //       emergency: ['emergency', 'urgent', 'bleeding', 'poison'],
+      //     },
+      //   },
+
       // Additional metadata stored with the agent config
       metadata: overrides?.metadata,
     });

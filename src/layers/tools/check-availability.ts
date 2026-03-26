@@ -8,7 +8,7 @@ export async function checkAvailability(
   date: string,
   serviceType?: string
 ): Promise<ToolResult> {
-  return withTimeout(5000, FALLBACK_MSG, async () => {
+  return withTimeout(5000, FALLBACK_MSG, async (_signal) => {
     const result = await triggerWebhook('appointment-booking', {
       action: 'check',
       date,

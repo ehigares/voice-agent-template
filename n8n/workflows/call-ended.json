@@ -90,9 +90,52 @@
       "parameters": {
         "method": "POST",
         "url": "={{ $env.WEBHOOK_BASE_URL }}/pipeline/process",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-pipeline-secret", "value": "={{ $env.PIPELINE_SECRET }}" }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Webhook Trigger').first().json.body) }}",
+        "options": {
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [250, 600]
+    },
+    {
+      "id": "log-error-to-supabase",
+      "name": "Log Error to workflow_errors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/workflow_errors",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'call-ended', error: $json.execution?.error?.message || 'Unknown error', level: 'error', metadata: { node: $json.execution?.lastNodeExecuted || 'unknown' } }) }}",
         "options": {
           "retry": {
             "maxTries": 3,
@@ -115,6 +158,9 @@
         [{ "node": "Return OK (Duplicate)", "type": "main", "index": 0 }],
         [{ "node": "Process Call via API", "type": "main", "index": 0 }]
       ]
+    },
+    "Error Trigger": {
+      "main": [[{ "node": "Log Error to workflow_errors", "type": "main", "index": 0 }]]
     }
   },
   "settings": { "executionOrder": "v1" }

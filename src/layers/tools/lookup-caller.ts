@@ -8,7 +8,7 @@ import type { ToolResult } from '../../types/index.js';
 const FALLBACK_MSG = "I wasn't able to look up your information right now, but I'm happy to help you.";
 
 export async function lookupCaller(phoneNumber: string): Promise<ToolResult> {
-  return withTimeout(5000, FALLBACK_MSG, async () => {
+  return withTimeout(5000, FALLBACK_MSG, async (_signal) => {
     const caller = await getCaller(phoneNumber);
 
     let memories: string[] = [];
