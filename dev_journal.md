@@ -173,7 +173,7 @@ Phase 2 — Core fixes and security               ✅ COMPLETE
 Phase 2 bug fixes — 4 bugs found in code review ✅ COMPLETE
 Phase 2.5 — Silent failure detection            ✅ COMPLETE
 Phase 3 — Template completeness                 ✅ COMPLETE
-Phase 4 — Docs and deployment                   ← CURRENT
+Phase 4 — Docs and deployment                   ✅ COMPLETE
 ↓
 npm run build — zero TypeScript errors
 ↓
@@ -356,10 +356,10 @@ STATUS: COMPLETE
 
 ---
 
-## Phase 4 — Documentation and Deployment
-STATUS: PENDING — start after Phase 3 is confirmed pushed (NEXT)
+## Phase 4 — Documentation and Deployment — COMPLETE
+STATUS: COMPLETE
 
-- [ ] Create DEPLOYMENT.md covering:
+- [x] Create DEPLOYMENT.md covering:
       LOCAL DEVELOPMENT:
         - Docker compose up and what each service does
         - ngrok setup for webhook testing
@@ -392,7 +392,7 @@ STATUS: PENDING — start after Phase 3 is confirmed pushed (NEXT)
         - [ ] NODE_ENV=production set
         - [ ] VAPI_WEBHOOK_SECRET set (not empty)
         - [ ] TRANSFER_PHONE_NUMBER set
-        - [ ] N8N_PUBLIC_URL set to production domain
+        - [ ] N8N_BASE_URL set to production n8n instance URL
         - [ ] Volume encryption enabled (DigitalOcean or Railway)
         - [ ] Log drain configured
         - [ ] UptimeRobot monitor active on /health
@@ -408,13 +408,13 @@ STATUS: PENDING — start after Phase 3 is confirmed pushed (NEXT)
         - Healthy system has zero rows
         - UptimeRobot alerts on /health failures
 
-- [ ] Create railway.toml with correct service config
-- [ ] Rewrite README.md to include:
+- [x] Create railway.toml with correct service config
+- [x] Rewrite README.md to include:
       - Monitoring section pointing to workflow_errors
       - Updated commands including validate and create-outbound-call
       - Droplet as production hosting option
-- [ ] Final consistency pass — all .md files match actual codebase
-- [ ] Follow Session End Protocol — commit, push, confirm
+- [x] Final consistency pass — all .md files match actual codebase
+- [x] Follow Session End Protocol — commit, push, confirm
 
 ---
 
@@ -514,6 +514,37 @@ STATUS: PENDING — start after Phase 3 is confirmed pushed (NEXT)
 - TODO:CONFIGURE audit: grep confirmed consistent markers across
   reference-agent.ts, custom-tool-template.ts, transfer-to-human.ts.
 - npm run build: zero errors. grep console.log src/: zero results.
+
+### [Phase 4 — Documentation and deployment — COMPLETE]
+- DEPLOYMENT.md expanded from stub to full deployment guide with 6 sections:
+  1. Local Development: Docker compose services explained, ngrok setup,
+     Vapi server URL configuration, Telnyx→Vapi number routing.
+  2. Railway Deployment: CLI setup, env var config, `railway up`, log
+     checking, production settings.
+  3. DigitalOcean Droplet: full step-by-step Ubuntu guide with copy-paste
+     commands — droplet sizing table, Node.js 22 install, Docker install,
+     nginx reverse proxy config, SSL via certbot, PM2 process management,
+     GitHub deploy workflow, env var management, deploy.sh automation.
+  4. n8n Cloud Alternative: when to use cloud vs self-hosted, setup steps,
+     N8N_BASE_URL swap.
+  5. Monitoring: preserved from Phase 2.5 (workflow_errors table, /health).
+  6. Production Checklist: preserved from Phase 2.5 (UptimeRobot, env vars).
+- Railway vs Droplet comparison table added with cost, control, and
+  scaling tradeoffs.
+- railway.toml created: Nixpacks builder, `npm start`, /health
+  healthcheck with 10s timeout for zero-downtime deploys.
+- README.md rewritten: monitoring section (workflow_errors + /health),
+  updated commands table (validate, create-outbound-call, npm start),
+  n8n workflows updated to 5 (added monitoring workflows), droplet as
+  production hosting option, custom tool template reference.
+- Final consistency pass — 6 discrepancies found and fixed:
+  1. n8n/workflows/ missing 2 monitoring workflow backups → copied
+  2. TRANSFER_PHONE_NUMBER missing from .env.example → added
+  3. N8N_PUBLIC_URL missing from .env.example → added with comment
+  4. CLAUDE.md database tables missing workflow_errors → added
+  5. CLAUDE.md Deployment section didn't mention DigitalOcean → updated
+  6. CLAUDE.md extra blank lines in Session End Protocol → cleaned up
+- npm run build: zero errors.
 
 ### [Pre-Phase 4 — custom-tool-template.ts rewrite]
 - Rewrote custom-tool-template.ts from stub (empty function body with
