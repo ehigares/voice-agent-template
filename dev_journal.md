@@ -172,8 +172,8 @@ Phase 1 — Structural cleanup                    ✅ COMPLETE
 Phase 2 — Core fixes and security               ✅ COMPLETE
 Phase 2 bug fixes — 4 bugs found in code review ✅ COMPLETE
 Phase 2.5 — Silent failure detection            ✅ COMPLETE
-Phase 3 — Template completeness                 ← CURRENT
-Phase 4 — Docs and deployment                   PENDING
+Phase 3 — Template completeness                 ✅ COMPLETE
+Phase 4 — Docs and deployment                   ← CURRENT
 ↓
 npm run build — zero TypeScript errors
 ↓
@@ -331,33 +331,33 @@ Not a code change. Add to DEPLOYMENT.md as a required production step:
 
 ---
 
-## Phase 3 — Template Completeness
-STATUS: PENDING — start after Phase 2.5 is confirmed pushed (NEXT)
+## Phase 3 — Template Completeness — COMPLETE
+STATUS: COMPLETE
 
-- [ ] Verify reference-agent.ts has TODO:CONFIGURE on every
+- [x] Verify reference-agent.ts has TODO:CONFIGURE on every
       configurable field — read carefully, don't assume
-- [ ] Add custom-tool-template.ts to src/layers/tools/ with full
+- [x] Add custom-tool-template.ts to src/layers/tools/ with full
       three-rule pattern (backchannel + withTimeout + fallback)
       and detailed comments showing how to add client-specific tools
-- [ ] Add business hours enforcement to base-agent.ts:
+- [x] Add business hours enforcement to base-agent.ts:
       both system prompt section AND Vapi schedule config section
       with TODO:CONFIGURE markers on both
-- [ ] Create scripts/validate.ts — lightweight connection check,
+- [x] Create scripts/validate.ts — lightweight connection check,
       faster than setup.ts, run this after every deployment to
       confirm all services are reachable
-- [ ] Create scripts/create-outbound-call.ts stub with --phone and
+- [x] Create scripts/create-outbound-call.ts stub with --phone and
       --assistant-id flags and Vapi outbound call API wiring
       (stub only — outbound is a future feature)
-- [ ] Add npm run validate to package.json scripts
-- [ ] Add npm run create-outbound-call to package.json scripts
-- [ ] Verify all TODO:CONFIGURE markers are consistent throughout
+- [x] Add npm run validate to package.json scripts
+- [x] Add npm run create-outbound-call to package.json scripts
+- [x] Verify all TODO:CONFIGURE markers are consistent throughout
       Run: grep -r "TODO:CONFIGURE" src/ and review every result
-- [ ] Follow Session End Protocol — commit, push, confirm
+- [x] Follow Session End Protocol — commit, push, confirm
 
 ---
 
 ## Phase 4 — Documentation and Deployment
-STATUS: PENDING — start after Phase 3 is confirmed pushed
+STATUS: PENDING — start after Phase 3 is confirmed pushed (NEXT)
 
 - [ ] Create DEPLOYMENT.md covering:
       LOCAL DEVELOPMENT:
@@ -489,6 +489,30 @@ STATUS: PENDING — start after Phase 3 is confirmed pushed
 - DEPLOYMENT.md created with Monitoring section (workflow_errors table
   check instructions) and Production Checklist section (UptimeRobot
   setup as required step, not optional).
+- npm run build: zero errors. grep console.log src/: zero results.
+
+### [Phase 3 — Template completeness — COMPLETE]
+- reference-agent.ts audited: all configurable fields have TODO:CONFIGURE
+  markers. Added businessHours config with TODO:CONFIGURE.
+- custom-tool-template.ts created in src/layers/tools/ with full
+  three-rule pattern (withTimeout, fallback message, backchannel note),
+  typed input interface, and commented example patterns for Supabase
+  queries, external API calls, and n8n workflow triggers.
+- Business hours enforcement added to base-agent.ts in both places:
+  1. System prompt injection via buildBusinessHoursPrompt() — appends
+     hours, timezone, and after-hours behavior rules to the LLM prompt
+  2. Vapi schedule config via getScheduleConfig() — returns the schedule
+     object for infrastructure-level call rejection outside hours
+- BusinessHours and DaySchedule types added to src/agents/types.ts.
+- scripts/validate.ts created: lightweight connection check with 5s
+  timeout per service. Checks Supabase, Vapi, Telnyx, Pinecone, Mem0,
+  n8n. Respects ENABLE_PINECONE/ENABLE_MEM0 flags. Exits 1 on failure.
+- scripts/create-outbound-call.ts stub created: parses --phone and
+  --assistant-id flags, calls Vapi outbound call API. Ready for future
+  outbound calling feature.
+- npm scripts added: `npm run validate`, `npm run create-outbound-call`
+- TODO:CONFIGURE audit: grep confirmed consistent markers across
+  reference-agent.ts, custom-tool-template.ts, transfer-to-human.ts.
 - npm run build: zero errors. grep console.log src/: zero results.
 
 ---

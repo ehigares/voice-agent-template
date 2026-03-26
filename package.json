@@ -10,8 +10,10 @@
     "start": "node dist/index.js",
     "setup": "tsx scripts/setup.ts",
     "create-agent": "tsx scripts/seed.ts",
+    "validate": "tsx scripts/validate.ts",
     "seed": "tsx scripts/seed.ts",
-    "seed-knowledge": "tsx scripts/seed-knowledge.ts"
+    "seed-knowledge": "tsx scripts/seed-knowledge.ts",
+    "create-outbound-call": "tsx scripts/create-outbound-call.ts"
   },
   "keywords": [
     "voice-agent",

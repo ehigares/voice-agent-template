@@ -169,6 +169,26 @@ export class ReferenceAgent extends BaseAgentBuilder {
       // Whether to record calls (default: true — needed for training pipeline)
       recordingEnabled: overrides?.recordingEnabled,
 
+      // TODO:CONFIGURE — Business hours for this client.
+      // REQUIRED for every client. Must be set in TWO places:
+      //   1. Here (appended to system prompt automatically by base-agent.ts)
+      //   2. Vapi schedule config (call getScheduleConfig() from base-agent.ts
+      //      and pass it when setting up the phone number)
+      //
+      // Omit days the business is closed. Times are 24h format.
+      // See CLAUDE.md "Business Hours Enforcement" for the full rule.
+      businessHours: overrides?.businessHours ?? {
+        timezone: 'TODO:CONFIGURE', // e.g. 'America/New_York'
+        schedule: [
+          // TODO:CONFIGURE — add one entry per open day
+          { day: 'monday', open: '09:00', close: '17:00' },
+          { day: 'tuesday', open: '09:00', close: '17:00' },
+          { day: 'wednesday', open: '09:00', close: '17:00' },
+          { day: 'thursday', open: '09:00', close: '17:00' },
+          { day: 'friday', open: '09:00', close: '17:00' },
+        ],
+      },
+
       // Additional metadata stored with the agent config
       metadata: overrides?.metadata,
     });
