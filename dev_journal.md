@@ -515,6 +515,20 @@ STATUS: PENDING — start after Phase 3 is confirmed pushed (NEXT)
   reference-agent.ts, custom-tool-template.ts, transfer-to-human.ts.
 - npm run build: zero errors. grep console.log src/: zero results.
 
+### [Pre-Phase 4 — custom-tool-template.ts rewrite]
+- Rewrote custom-tool-template.ts from stub (empty function body with
+  commented-out patterns) to a fully working checkLoyaltyPoints example.
+- Added typed LoyaltyPointsInput interface with real fields (phone_number,
+  program_id) and LoyaltyApiResponse interface for the external API shape.
+- Function body demonstrates: real fetch() call with proper headers, error
+  handling that throws to trigger withTimeout fallback, typed JSON parsing,
+  structured logging before and after the API call, and a ToolResult with
+  realistic data fields (points_balance, tier, message).
+- Every non-obvious line has a comment explaining WHY, not just WHAT.
+- Goal: a future Claude Code session can copy, rename, swap API details,
+  and have a working tool in under 30 minutes without guessing.
+- npm run build: zero errors.
+
 ---
 
 ## Known Issues / Watch List
