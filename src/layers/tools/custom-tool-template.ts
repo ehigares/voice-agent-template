@@ -29,55 +29,98 @@ const FALLBACK_MSG =
   "I'm sorry, I wasn't able to complete that right now. Let me connect you with someone who can help.";
 
 // TODO:CONFIGURE — Define the shape of your tool's input parameters.
-// These must match the JSON schema in tool-definitions.ts.
-interface CustomToolInput {
-  // Example fields — replace with your actual parameters:
-  // query: string;
-  // caller_id: string;
-  // date?: string;
+// These must match the JSON schema you register in tool-definitions.ts.
+// Use exact field names — Vapi passes them as-is from the LLM's function call.
+interface LoyaltyPointsInput {
+  phone_number: string;   // Caller's phone number, used to look up their account
+  program_id: string;     // Which loyalty program to query (clients may run multiple)
+}
+
+// TODO:CONFIGURE — Shape of the external API's response body.
+// Typing this separately lets TypeScript catch mismatches between what the
+// API returns and what you hand back to the LLM.
+interface LoyaltyApiResponse {
+  points_balance: number;
+  tier: string;
+  member_since: string;
 }
 
 /**
  * TODO:CONFIGURE — Rename this function to match your tool's purpose.
  *
+ * Example: checkLoyaltyPoints — looks up a caller's rewards balance
+ * from an external loyalty API and returns it so the LLM can read the
+ * result back to the caller naturally.
+ *
  * This is the tool handler called by webhook-handler.ts when Vapi
  * invokes the tool during a call. It runs inside withTimeout(5000)
  * so it will be cut off at 5 seconds if the work takes too long.
  *
- * @param _input - Parameters from Vapi, typed to CustomToolInput
- * @returns ToolResult with success/failure and data for the LLM
+ * @param input - Parameters from Vapi, typed to LoyaltyPointsInput
+ * @returns ToolResult with points_balance, tier, and a message for the LLM
  */
-export async function customTool(_input: CustomToolInput): Promise<ToolResult> {
+export async function checkLoyaltyPoints(input: LoyaltyPointsInput): Promise<ToolResult> {
   return withTimeout(5000, FALLBACK_MSG, async () => {
-    // TODO:CONFIGURE — Replace with your actual tool logic.
-    //
-    // Common patterns:
-    //
-    // 1. Query Supabase:
-    //    const { createClient } = await import('@supabase/supabase-js');
-    //    const { config } = await import('../../config.js');
-    //    const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
-    //    const { data, error } = await supabase.from('table').select('*').eq('id', input.id);
-    //
-    // 2. Call an external API:
-    //    const response = await fetch('https://api.example.com/endpoint', {
-    //      method: 'POST',
-    //      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    //      body: JSON.stringify({ ... }),
-    //    });
-    //    if (!response.ok) throw new Error(`API error: ${response.status}`);
-    //    const data = await response.json();
-    //
-    // 3. Trigger an n8n workflow:
-    //    const { triggerWebhook } = await import('../automation/n8n-client.js');
-    //    const result = await triggerWebhook('my-workflow', { key: 'value' });
+    // TODO:CONFIGURE — Replace this URL with the client's actual API endpoint.
+    // The URL, auth header, and body shape will vary per client.
+    const apiUrl = 'https://api.example.com/v1/loyalty/lookup';
 
-    logger.info('custom-tool', 'Custom tool executed', { /* input */ });
+    // TODO:CONFIGURE — Replace with the client's real API key, loaded from config.ts.
+    // Example: const { config } = await import('../../config.js');
+    //          then use config.LOYALTY_API_KEY below.
+    const apiKey = 'TODO:CONFIGURE';
 
+    // Log before the network call so we can see the attempt even if it times out
+    logger.info('check-loyalty-points', 'Looking up loyalty points', {
+      phone: input.phone_number,
+      programId: input.program_id,
+    });
+
+    // Make the external API call — fetch is globally available in Node 18+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Bearer token auth is the most common pattern; swap for API-key header if needed
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        phone_number: input.phone_number,
+        program_id: input.program_id,
+      }),
+    });
+
+    // Non-2xx means the API rejected the request — throw so withTimeout catches it
+    // and returns the fallback message to the caller instead of raw error data
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger.error('check-loyalty-points', 'Loyalty API returned error', {
+        status: response.status,
+        body: errorBody,
+        phone: input.phone_number,
+      });
+      // Throwing here triggers the withTimeout catch block, which returns FALLBACK_MSG
+      throw new Error(`Loyalty API error: ${response.status}`);
+    }
+
+    // Parse the JSON body — typed so we get compile-time checks on field access
+    const result = await response.json() as LoyaltyApiResponse;
+
+    logger.info('check-loyalty-points', 'Loyalty lookup succeeded', {
+      phone: input.phone_number,
+      tier: result.tier,
+      points: result.points_balance,
+    });
+
+    // Return data the LLM can use to form a natural spoken response.
+    // The "message" field is a pre-formatted suggestion — the LLM may rephrase it,
+    // but having it here ensures the tool always provides a usable answer.
     return {
       success: true,
       data: {
-        message: 'TODO:CONFIGURE — replace with actual tool response data',
+        points_balance: result.points_balance,
+        tier: result.tier,
+        message: `You have ${result.points_balance} points and you're a ${result.tier} member.`,
       },
     };
   });

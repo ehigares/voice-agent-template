@@ -223,9 +223,12 @@ At the end of every session, before stopping, always:
 3. Commit with a descriptive message:
    `git commit -m "phase-N: brief description of what was done"`
 4. Push to GitHub: `git push origin main`
-5. Confirm the push succeeded before ending the session
+5. The dev_journal.md commit must be its own separate commit, always last.
+6. Confirm the push succeeded before ending the session
 
 Do not consider a session complete until the push is confirmed.
+
+
 
 ---
 
