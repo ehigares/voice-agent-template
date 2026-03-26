@@ -128,7 +128,8 @@ Return 401 immediately on signature failure — do not log the payload.
 - Migrations in `supabase/migrations/` — always add new migrations with
   the next sequential number
 - Parameterized queries only — never string interpolation in SQL
-- Tables: `agent_configs`, `callers`, `calls`, `transcripts`, `training_data`
+- Tables: `agent_configs`, `callers`, `calls`, `transcripts`, `training_data`,
+  `workflow_errors`
 - Every embedding column has a companion `embedding_model TEXT` column
   recording which model generated it (e.g. `text-embedding-ada-002`)
 
@@ -191,14 +192,17 @@ npm run create-outbound-call # Initiate an outbound call (stub)
 
 ## Deployment
 
-The webhook server deploys to Railway by default.
-See `DEPLOYMENT.md` for full setup instructions including:
-- ngrok for local webhook testing
+Two deployment paths are supported:
+- **Railway** — one command (`railway up`), ~$5/month per client
+- **DigitalOcean Droplet** — full Ubuntu server with nginx, SSL, PM2
+
+See `DEPLOYMENT.md` for step-by-step instructions for both paths, plus:
+- Local development setup with Docker and ngrok
 - Telnyx → Vapi number routing
 - n8n Cloud as alternative to self-hosted
 - Production checklist (encryption, log drain, key rotation)
 
-`railway.toml` is included — deployment is one command: `railway up`
+`railway.toml` is included for zero-downtime Railway deploys.
 
 ---
 
@@ -227,8 +231,6 @@ At the end of every session, before stopping, always:
 6. Confirm the push succeeded before ending the session
 
 Do not consider a session complete until the push is confirmed.
-
-
 
 ---
 

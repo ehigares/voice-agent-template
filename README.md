@@ -5,38 +5,41 @@ Private agency template for building AI-powered voice agents for business client
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ Layer 1 — Telephony (Telnyx)                          ~$0.01/min   │
-│ SIP trunking · phone number provisioning · REST API                │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ Layer 2 — Orchestration (Vapi)                        ~$0.05/min   │
-│ Full JSON config · webhooks · function calling · HMAC verification  │
-└──────┬─────────────────────┬────────────────────────┬───────────────┘
-       ▼                     ▼                        ▼
-┌──────────────┐  ┌─────────────────┐  ┌──────────────────────────────┐
-│ Layer 3a STT │  │ Layer 3b TTS    │  │ Layer 4 — LLM                │
-│ Deepgram     │  │ Cartesia Sonic  │  │ Claude Haiku (speed)         │
-│ Nova-3       │  │ (ElevenLabs     │  │ Claude Sonnet (reasoning)    │
-│              │  │  swappable)     │  │                              │
-└──────────────┘  └─────────────────┘  └──────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ Layer 5 — Automation (n8n, self-hosted)                             │
-│ Vapi webhooks → n8n workflows → CRM, calendar, email, Slack        │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ Layer 6 — Memory (Supabase + Pinecone + Mem0)                      │
-│ Structured data · semantic search · persistent caller memory        │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ Layer 7 — Training Loop (S3 + AssemblyAI)                          │
-│ Auto-record → transcribe → tag → score → feed back as training data│
-└─────────────────────────────────────────────────────────────────────┘
++---------------------------------------------------------------------+
+| Layer 1 -- Telephony (Telnyx)                          ~$0.01/min   |
+| SIP trunking - phone number provisioning - REST API                 |
++----------------------------+----------------------------------------+
+                             |
+                             v
++---------------------------------------------------------------------+
+| Layer 2 -- Orchestration (Vapi)                        ~$0.05/min   |
+| Full JSON config - webhooks - function calling - HMAC verification  |
++------+---------------------+------------------------+---------------+
+       v                     v                        v
++--------------+  +-----------------+  +------------------------------+
+| Layer 3a STT |  | Layer 3b TTS    |  | Layer 4 -- LLM              |
+| Deepgram     |  | Cartesia Sonic  |  | Claude Haiku (speed)        |
+| Nova-3       |  | (ElevenLabs     |  | Claude Sonnet (reasoning)   |
+|              |  |  swappable)     |  |                             |
++--------------+  +-----------------+  +------------------------------+
+                             |
+                             v
++---------------------------------------------------------------------+
+| Layer 5 -- Automation (n8n, self-hosted)                            |
+| Vapi webhooks -> n8n workflows -> CRM, calendar, email, Slack       |
++----------------------------+----------------------------------------+
+                             |
+                             v
++---------------------------------------------------------------------+
+| Layer 6 -- Memory (Supabase + Pinecone + Mem0)                      |
+| Structured data - semantic search - persistent caller memory        |
++----------------------------+----------------------------------------+
+                             |
+                             v
++---------------------------------------------------------------------+
+| Layer 7 -- Training Loop (S3 + AssemblyAI)                          |
+| Auto-record -> transcribe -> tag -> score -> feed back as training  |
++---------------------------------------------------------------------+
 ```
 
 ## New Client Setup
@@ -49,7 +52,7 @@ git remote set-url origin <new-private-repo-url>
 git push -u origin main
 
 # 2. Fill out the intake document
-#    CLIENT_INTAKE.md — this drives the entire build
+#    CLIENT_INTAKE.md -- this drives the entire build
 
 # 3. Configure environment
 cp .env.example .env
@@ -63,7 +66,7 @@ npm install
 npm run setup
 
 # 6. Build the client agent
-#    Read reference-agent.ts → create [client]-agent.ts
+#    Read reference-agent.ts -> create [client]-agent.ts
 #    Resolve all TODO:CONFIGURE markers
 
 # 7. Deploy
@@ -94,6 +97,10 @@ Agents can invoke tools during live calls:
 | `book-appointment` | Booking confirmed | Book appointment via n8n |
 | `transfer-to-human` | Escalation needed | Warm transfer to a human |
 
+Custom tools: copy `src/layers/tools/custom-tool-template.ts`, rename,
+and swap in the client's API details. See the file for a fully worked
+example.
+
 ## Knowledge Base
 
 Ingest client documents into Pinecone for real-time search during calls:
@@ -104,19 +111,21 @@ npm run seed-knowledge -- ./docs/client-name
 
 ## n8n Workflows
 
-Three workflows are included and deployed via the n8n API:
+Five workflows are included and deployed via the n8n API:
 
-1. **Call Ended** — Post-call processing (save, transcribe, tag, score)
-2. **Appointment Booking** — Check availability or book appointments
-3. **CRM Update** — Create/update CRM contacts after calls
+1. **Call Ended** -- Post-call processing (save, transcribe, tag, score)
+2. **Appointment Booking** -- Check availability or book appointments
+3. **CRM Update** -- Create/update CRM contacts after calls
+4. **Training Pipeline Monitor** -- Daily check for stale training data
+5. **Recording Archive Monitor** -- 30-minute check for unarchived recordings
 
 ## Training Pipeline
 
 Every call automatically feeds the training loop:
 
 ```
-Call ends → Save metadata → Upload recording → Transcribe (AssemblyAI)
-  → Auto-tag (sentiment, topics, outcomes) → Score quality → Save training data
+Call ends -> Save metadata -> Upload recording -> Transcribe (AssemblyAI)
+  -> Auto-tag (sentiment, topics, outcomes) -> Score quality -> Save training data
 ```
 
 ## Commands
@@ -124,34 +133,73 @@ Call ends → Save metadata → Upload recording → Transcribe (AssemblyAI)
 | Command | Description |
 |---------|-------------|
 | `docker compose up` | Start local Postgres, n8n, MinIO |
-| `npm run setup` | Validate env, test connections, run migrations |
+| `npm run setup` | Validate env, test connections, run migrations, deploy n8n workflows |
+| `npm run validate` | Quick connection check -- confirms all services are reachable |
 | `npm run dev` | Start webhook server (development) |
 | `npm run build` | Compile TypeScript |
+| `npm start` | Start webhook server (production, from compiled dist/) |
+| `npm run create-agent` | Create and deploy an agent to Vapi |
 | `npm run seed` | Seed agent config to database |
 | `npm run seed -- --deploy` | Seed + deploy agent to Vapi |
 | `npm run seed-knowledge -- <dir>` | Ingest docs into Pinecone |
+| `npm run create-outbound-call` | Initiate an outbound call (stub) |
 
 ## Project Structure
 
 ```
 src/
-├── config.ts                    # Zod-validated environment config
-├── index.ts                     # Webhook server entry point
-├── types/index.ts               # Shared TypeScript types
-├── layers/
-│   ├── telephony/               # Telnyx phone provisioning
-│   ├── orchestration/           # Vapi client, types, webhook handler
-│   ├── speech/                  # STT (Deepgram) + TTS (Cartesia/ElevenLabs)
-│   ├── llm/                     # Claude model config
-│   ├── automation/              # n8n client + workflow JSONs
-│   ├── memory/                  # Supabase, Pinecone, Mem0 clients
-│   ├── tools/                   # Mid-call function handlers
-│   └── training/                # S3, transcription, tagging, scoring
-└── agents/
-    ├── base-agent.ts            # Core agent config builder
-    ├── reference-agent.ts       # READ ONLY — pattern for client agents
-    └── types.ts                 # Agent type definitions
+|-- config.ts                    # Zod-validated environment config
+|-- index.ts                     # Webhook server entry point
+|-- lib/
+|   +-- logger.ts                # Structured JSON logger (never use console.log)
+|-- types/
+|   +-- index.ts                 # Shared TypeScript types
+|-- layers/
+|   |-- telephony/               # Telnyx phone provisioning
+|   |-- orchestration/           # Vapi client, types, webhook handler
+|   |-- speech/                  # STT (Deepgram) + TTS (Cartesia/ElevenLabs)
+|   |-- llm/                     # Claude model config
+|   |-- automation/              # n8n client + workflow JSONs
+|   |-- memory/                  # Supabase, Pinecone, Mem0 clients
+|   |-- tools/                   # Mid-call function handlers + custom tool template
+|   +-- training/                # S3, transcription, tagging, scoring
++-- agents/
+    |-- base-agent.ts            # Core agent config builder
+    |-- reference-agent.ts       # READ ONLY -- pattern for client agents
+    +-- types.ts                 # Agent type definitions
 ```
+
+## Deployment
+
+Two deployment paths are supported:
+
+- **Railway** -- One-command deploy (`railway up`), ~$5/month per client.
+  Best for early clients and quick iteration.
+- **DigitalOcean Droplet** -- Full Ubuntu server with nginx, SSL, PM2.
+  Best for production scale and cost optimization at volume.
+
+See `DEPLOYMENT.md` for step-by-step instructions for both paths,
+plus n8n Cloud as an alternative to self-hosted n8n.
+
+## Monitoring
+
+### /health Endpoint
+
+The `/health` endpoint performs a deep probe of all connected services
+(Supabase, Pinecone, Mem0, n8n) and returns per-service status. Target
+this with UptimeRobot for external monitoring.
+
+### workflow_errors Table
+
+The `workflow_errors` table in Supabase logs silent failures detected by
+monitoring workflows. A healthy system has **zero rows**.
+
+```sql
+SELECT * FROM workflow_errors ORDER BY created_at DESC LIMIT 50;
+```
+
+Check this table weekly. See `DEPLOYMENT.md` for full monitoring
+operations documentation.
 
 ## Cost Estimates
 
