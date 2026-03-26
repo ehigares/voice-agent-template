@@ -43,6 +43,7 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
       recording_url: data.recording_url ?? null,
       s3_key: null,
       recording_archived: false,
+      recording_archived_at: null,
       cost_cents: null,
       agent_id: data.agent_id ?? null,
       caller_id: null,

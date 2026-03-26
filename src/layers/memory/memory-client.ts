@@ -32,8 +32,9 @@ const nullMemoryClient: MemoryClient = {
 
 /**
  * Creates the active MemoryClient based on configuration.
+ * Uses dynamic ESM import to lazy-load the Mem0 adapter.
  */
-function createMemoryClient(): MemoryClient {
+async function createMemoryClient(): Promise<MemoryClient> {
   if (!config.ENABLE_MEM0) {
     logger.info('memory', 'Mem0 disabled — using null memory client');
     return nullMemoryClient;
@@ -41,8 +42,7 @@ function createMemoryClient(): MemoryClient {
 
   // Lazy-load the Mem0 adapter to avoid importing the SDK when disabled
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { mem0Adapter } = require('./mem0-adapter.js') as { mem0Adapter: MemoryClient };
+    const { mem0Adapter } = await import('./mem0-adapter.js');
     return mem0Adapter;
   } catch {
     logger.warn('memory', 'Failed to load Mem0 adapter — falling back to null client');
@@ -50,4 +50,31 @@ function createMemoryClient(): MemoryClient {
   }
 }
 
-export const memoryClient: MemoryClient = createMemoryClient();
+/** Initialized via initMemoryClient() at startup. */
+let _memoryClient: MemoryClient = nullMemoryClient;
+
+/**
+ * Call once at application startup (e.g. in server.ts or index.ts)
+ * before any tool handlers run.
+ */
+export async function initMemoryClient(): Promise<void> {
+  _memoryClient = await createMemoryClient();
+}
+
+/**
+ * The active memory client. Returns the null client until
+ * initMemoryClient() has been awaited.
+ */
+export function getMemoryClient(): MemoryClient {
+  return _memoryClient;
+}
+
+/**
+ * @deprecated Use getMemoryClient() instead. Kept for backward compatibility
+ * during migration — will be the null client until initMemoryClient() runs.
+ */
+export const memoryClient: MemoryClient = new Proxy(nullMemoryClient, {
+  get(_target, prop, receiver) {
+    return Reflect.get(_memoryClient, prop, receiver);
+  },
+});

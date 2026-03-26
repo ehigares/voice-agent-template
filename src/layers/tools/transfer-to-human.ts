@@ -38,7 +38,7 @@ export async function transferToHuman(
           type: 'number',
           // TODO:CONFIGURE — The phone number to transfer to.
           // Set this per-client in the client agent file or via env var.
-          number: process.env.TRANSFER_PHONE_NUMBER ?? '',
+          number: config.TRANSFER_PHONE_NUMBER,
           message: reason
             ? `Transferring caller. Reason: ${reason}`
             : 'Transferring caller to a team member.',

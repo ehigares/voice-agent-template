@@ -279,6 +279,17 @@ STATUS: PENDING
 - Updated .env.example with all new vars: feature flags, embeddings, storage, concurrency
 - vector-search.ts now uses configurable EMBEDDING_MODEL and EMBEDDING_DIMENSIONS
 
+### [2026-03-26 — Pre-Phase-3 bug fixes]
+- Made TELNYX_API_KEY and TELNYX_PHONE_NUMBER optional in config.ts (not all clients need Telnyx provisioning)
+- Replaced require() with dynamic ESM import in memory-client.ts; added initMemoryClient() async init function
+  called at startup in index.ts; existing `memoryClient` export preserved via Proxy for backward compatibility
+- Added TRANSFER_PHONE_NUMBER to config schema; transfer-to-human.ts now uses config.TRANSFER_PHONE_NUMBER
+  instead of raw process.env access
+- Implemented backchannel acknowledgment in webhook-handler.ts handleFunctionCall — sends a Vapi "say" command
+  before each tool handler runs (per-tool messages defined in BACKCHANNEL_MESSAGES map)
+- Fixed pre-existing TS build error: added missing recording_archived_at to insertCall in pipeline.ts
+- Build passes with zero TypeScript errors
+
 ### [2026-03-26 — Phase 1+2 committed and pushed]
 - All Phase 1 (structural cleanup) and Phase 2 (core fixes) work committed
   in a single commit: `phase-1+2: structural cleanup, core fixes, security hardening`

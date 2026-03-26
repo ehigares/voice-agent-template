@@ -3,8 +3,9 @@ import { z } from 'zod';
 
 const configSchema = z.object({
   // Layer 1 — Telephony
-  TELNYX_API_KEY: z.string().min(1, 'TELNYX_API_KEY is required'),
-  TELNYX_PHONE_NUMBER: z.string().min(1, 'TELNYX_PHONE_NUMBER is required'),
+  // Optional — only needed if provisioning phone numbers via Telnyx
+  TELNYX_API_KEY: z.string().optional().default(''),
+  TELNYX_PHONE_NUMBER: z.string().optional().default(''),
 
   // Layer 2 — Orchestration
   VAPI_API_KEY: z.string().min(1, 'VAPI_API_KEY is required'),
@@ -52,6 +53,9 @@ const configSchema = z.object({
   S3_BUCKET: z.string().default('voice-agent-recordings'),
   STORAGE_ENDPOINT: z.string().optional().default(''),
   ASSEMBLYAI_API_KEY: z.string().optional().default(''),
+
+  // Transfer
+  TRANSFER_PHONE_NUMBER: z.string().optional().default(''),
 
   // Server
   WEBHOOK_PORT: z.coerce.number().default(3000),

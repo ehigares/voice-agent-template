@@ -134,6 +134,36 @@ app.post('/webhook/vapi', async (req: Request, res: Response) => {
   }
 });
 
+// ---- Backchannel Acknowledgment ----
+
+const BACKCHANNEL_MESSAGES: Record<string, string> = {
+  [TOOL_NAMES.LOOKUP_CALLER]: 'One moment while I pull up your information...',
+  [TOOL_NAMES.SEARCH_KNOWLEDGE]: 'Let me check that for you...',
+  [TOOL_NAMES.CHECK_AVAILABILITY]: 'Let me check the calendar...',
+  [TOOL_NAMES.BOOK_APPOINTMENT]: 'Let me get that booked for you...',
+  [TOOL_NAMES.TRANSFER_TO_HUMAN]: "I'll get someone on the line for you right away...",
+};
+
+async function sendBackchannel(callId: string, message: string): Promise<void> {
+  if (!callId || !config.VAPI_API_KEY) return;
+
+  try {
+    await fetch(`https://api.vapi.ai/call/${callId}/control`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.VAPI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ type: 'say', message }),
+    });
+  } catch (err) {
+    logger.warn('webhook', 'Backchannel failed (non-fatal)', {
+      callId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function handleFunctionCall(
   body: VapiServerMessage
 ): Promise<VapiServerMessageResponse> {
@@ -145,6 +175,12 @@ async function handleFunctionCall(
   const { name, parameters } = functionCall;
   const callId = body.message?.call?.id;
   logger.info('webhook', `Function call: ${name}`, { callId, parameters });
+
+  // Send backchannel acknowledgment before async tool work
+  const backchannelMsg = BACKCHANNEL_MESSAGES[name];
+  if (backchannelMsg && callId) {
+    await sendBackchannel(callId, backchannelMsg);
+  }
 
   let result: ToolResult;
 
