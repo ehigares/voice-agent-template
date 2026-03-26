@@ -57,14 +57,120 @@ function verifyHmac(req: Request): boolean {
 
 let activeCalls = 0;
 
-// Health check
-app.get('/health', (_req: Request, res: Response) => {
+// ---- Deep Health Check ----
+
+const HEALTH_PROBE_TIMEOUT = 3000;
+
+interface ServiceHealth {
+  status: 'ok' | 'degraded' | 'down';
+  latencyMs: number;
+}
+
+async function probeService(
+  name: string,
+  fn: () => Promise<void>
+): Promise<ServiceHealth> {
+  const start = Date.now();
+  try {
+    await Promise.race([
+      fn(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('probe timeout')), HEALTH_PROBE_TIMEOUT)
+      ),
+    ]);
+    const latencyMs = Date.now() - start;
+    return { status: latencyMs > 2000 ? 'degraded' : 'ok', latencyMs };
+  } catch {
+    return { status: 'down', latencyMs: Date.now() - start };
+  }
+}
+
+async function probeSupabase(): Promise<void> {
+  const { createClient } = await import('@supabase/supabase-js');
+  const supabase = createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
+  const { error } = await supabase.from('agent_configs').select('id').limit(1);
+  if (error && !error.message.includes('does not exist')) {
+    throw new Error(error.message);
+  }
+}
+
+async function probePinecone(): Promise<void> {
+  const response = await fetch('https://api.pinecone.io/indexes', {
+    headers: { 'Api-Key': config.PINECONE_API_KEY },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+async function probeMem0(): Promise<void> {
+  const response = await fetch('https://api.mem0.ai/v1/memories/', {
+    method: 'GET',
+    headers: { Authorization: `Token ${config.MEM0_API_KEY}` },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+async function probeN8n(): Promise<void> {
+  const response = await fetch(`${config.N8N_BASE_URL}/api/v1/workflows`, {
+    headers: config.N8N_API_KEY ? { 'X-N8N-API-KEY': config.N8N_API_KEY } : {},
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+app.get('/health', async (_req: Request, res: Response) => {
+  const services: Record<string, ServiceHealth | { status: 'disabled' }> = {};
+
+  // Supabase is always required
+  const probes: Promise<void>[] = [];
+
+  probes.push(
+    probeService('supabase', probeSupabase).then((r) => { services.supabase = r; })
+  );
+
+  if (config.ENABLE_PINECONE) {
+    probes.push(
+      probeService('pinecone', probePinecone).then((r) => { services.pinecone = r; })
+    );
+  } else {
+    services.pinecone = { status: 'disabled' };
+  }
+
+  if (config.ENABLE_MEM0) {
+    probes.push(
+      probeService('mem0', probeMem0).then((r) => { services.mem0 = r; })
+    );
+  } else {
+    services.mem0 = { status: 'disabled' };
+  }
+
+  probes.push(
+    probeService('n8n', probeN8n).then((r) => { services.n8n = r; })
+  );
+
+  await Promise.all(probes);
+
+  // Compute overall status from enabled services only
+  const enabledServices = Object.values(services).filter(
+    (s): s is ServiceHealth => s.status !== 'disabled'
+  );
+  const hasDown = enabledServices.some((s) => s.status === 'down');
+  const hasDegraded = enabledServices.some((s) => s.status === 'degraded');
+
+  let status: 'ok' | 'degraded' | 'down';
+  if (hasDown) {
+    status = 'down';
+  } else if (hasDegraded) {
+    status = 'degraded';
+  } else {
+    status = 'ok';
+  }
+
   res.json({
-    status: 'ok',
+    status,
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version ?? '0.0.0',
     activeCalls,
     maxConcurrentCalls: config.MAX_CONCURRENT_CALLS,
+    services,
   });
 });
 

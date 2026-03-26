@@ -127,7 +127,40 @@ async function main() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
   }, false);
 
-  // Step 6: Run migrations
+  // Step 6: Validate TRANSFER_PHONE_NUMBER if transfer tool is enabled
+  console.log('\n🔍 Checking agent configuration...');
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_KEY
+      );
+      const { data: agents } = await supabase
+        .from('agent_configs')
+        .select('tools')
+        .limit(10);
+
+      const hasTransferTool = agents?.some((agent: { tools?: string[] }) =>
+        agent.tools?.includes('TRANSFER_TO_HUMAN')
+      );
+
+      const transferNumber = process.env.TRANSFER_PHONE_NUMBER?.trim();
+      if (hasTransferTool && !transferNumber) {
+        console.log('');
+        console.log('  ⚠️  WARNING: TRANSFER_TO_HUMAN tool is enabled but');
+        console.log('     TRANSFER_PHONE_NUMBER is not set. Callers who ask for a human');
+        console.log('     will hear a failure message. Set TRANSFER_PHONE_NUMBER in .env');
+        console.log('');
+      } else {
+        log('✅', 'TRANSFER_PHONE_NUMBER check passed');
+      }
+    } catch {
+      log('⚠️', 'Could not check agent config for TRANSFER_PHONE_NUMBER (non-fatal)');
+    }
+  }
+
+  // Step 7: Run migrations
   console.log('\n🗃️  Running database migrations...');
   const migrationsDir = path.join(ROOT, 'supabase', 'migrations');
   if (fs.existsSync(migrationsDir)) {
@@ -156,7 +189,7 @@ async function main() {
     }
   }
 
-  // Step 7: Deploy n8n workflows
+  // Step 8: Deploy n8n workflows
   console.log('\n🔄 Deploying n8n workflows...');
   const workflowsDir = path.join(ROOT, 'src', 'layers', 'automation', 'workflows');
   if (fs.existsSync(workflowsDir) && process.env.N8N_BASE_URL && process.env.N8N_API_KEY) {

@@ -1,0 +1,236 @@
+{
+  "name": "Voice Agent — Training Pipeline Monitor",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Daily 6AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "count-calls",
+      "name": "Count Completed Calls (24h)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/calls?status=eq.completed&ended_at=gte.{{ new Date(Date.now() - 86400000).toISOString() }}&select=id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Prefer", "value": "count=exact" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "fullResponse": true } },
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "count-training",
+      "name": "Count Training Records (24h)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 500],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/training_data?created_at=gte.{{ new Date(Date.now() - 86400000).toISOString() }}&select=id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Prefer", "value": "count=exact" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "fullResponse": true } },
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "merge-counts",
+      "name": "Merge Counts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [750, 400],
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition"
+      }
+    },
+    {
+      "id": "check-stale",
+      "name": "Pipeline Stale?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1000, 400],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-calls",
+              "leftValue": "={{ $json.body?.length ?? 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            },
+            {
+              "id": "no-training",
+              "leftValue": "={{ $('Count Training Records (24h)').first().json.body?.length ?? 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "check-low",
+      "name": "Training Low?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1000, 600],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-calls",
+              "leftValue": "={{ $json.body?.length ?? 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            },
+            {
+              "id": "low-training",
+              "leftValue": "={{ $('Count Training Records (24h)').first().json.body?.length ?? 0 }}",
+              "rightValue": "={{ ($json.body?.length ?? 0) * 0.5 }}",
+              "operator": { "type": "number", "operation": "lt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "insert-error-stale",
+      "name": "Log Stale Pipeline Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/workflow_errors",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'training-pipeline-monitor', error: 'Training pipeline stale — calls completed but no training data written in last 24 hours', metadata: { calls_count: $('Count Completed Calls (24h)').first().json.body?.length ?? 0, training_count: 0 } }) }}",
+        "options": {
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "insert-warning-low",
+      "name": "Log Low Training Warning",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 600],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/workflow_errors",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'training-pipeline-monitor', error: 'Training pipeline degraded — less than 50% of completed calls have training data', metadata: { calls_count: $('Count Completed Calls (24h)').first().json.body?.length ?? 0, training_count: $('Count Training Records (24h)').first().json.body?.length ?? 0 }, level: 'warning' }) }}",
+        "options": {
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 6AM Trigger": {
+      "main": [
+        [
+          { "node": "Count Completed Calls (24h)", "type": "main", "index": 0 },
+          { "node": "Count Training Records (24h)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Count Completed Calls (24h)": {
+      "main": [[{ "node": "Merge Counts", "type": "main", "index": 0 }]]
+    },
+    "Count Training Records (24h)": {
+      "main": [[{ "node": "Merge Counts", "type": "main", "index": 1 }]]
+    },
+    "Merge Counts": {
+      "main": [
+        [
+          { "node": "Pipeline Stale?", "type": "main", "index": 0 },
+          { "node": "Training Low?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Pipeline Stale?": {
+      "main": [
+        [{ "node": "Log Stale Pipeline Error", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Training Low?": {
+      "main": [
+        [{ "node": "Log Low Training Warning", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}

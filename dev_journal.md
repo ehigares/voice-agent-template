@@ -125,108 +125,296 @@ confabulated out of hours. Vapi schedule config enforces at the
 infrastructure level regardless of LLM behavior.
 Decision: system prompt AND Vapi schedule config, both required.
 
+### Why Telnyx is optional not required in config
+The webhook server, agent logic, and training pipeline all function
+without Telnyx. Telnyx is only needed when provisioning a real phone
+number. Marking it required blocked the server from starting during
+E2E testing with only the 5 core services configured.
+Decision: TELNYX_API_KEY and TELNYX_PHONE_NUMBER are optional.
+Fixed in Phase 2 bug fixes.
+
+### Why require() was replaced with dynamic import() in memory-client.ts
+package.json has "type": "module" making this a pure ESM project.
+require() does not exist in ESM modules and throws ReferenceError
+at runtime. Dynamic import() is the correct ESM equivalent.
+Decision: All imports use ESM. require() is banned. Fixed in Phase 2
+bug fixes.
+
+### Why TRANSFER_PHONE_NUMBER must go through config.ts
+Direct process.env reads bypass Zod validation. An empty transfer
+number silently sends a malformed request to Vapi, causing transfer
+failures with no clear error. Config validation catches this at startup.
+Decision: All env vars go through config.ts. Fixed in Phase 2 bug fixes.
+
+### Why /health does deep service probing
+A shallow health check (just "server is running") gives false confidence.
+The most damaging silent failures are when the server is up but a
+downstream service (Pinecone, Mem0, Supabase) is broken. A deep health
+check surfaces degraded states before callers experience them.
+Decision: /health probes all connected services and reports per-service
+status. Added in Phase 2.5.
+
+### Why an external uptime monitor is required
+Railway's internal health monitoring only tells you if the container
+crashed. It does not catch cases where the server is running but
+returning errors, or where Railway itself has an outage. An external
+monitor (UptimeRobot) pings /health from outside Railway's network
+every 60 seconds and alerts via email/SMS on failure.
+Decision: UptimeRobot setup documented in DEPLOYMENT.md as required
+production step, not optional.
+
 ---
 
-## Build Phases — Authoritative Task List
+## Full Build Sequence — Authoritative Roadmap
 
-### Phase 1 — Structural cleanup
+```
+Phase 1 — Structural cleanup                    ✅ COMPLETE
+Phase 2 — Core fixes and security               ✅ COMPLETE
+Phase 2 bug fixes — 4 bugs found in code review ✅ COMPLETE
+Phase 2.5 — Silent failure detection            ✅ COMPLETE
+Phase 3 — Template completeness                 ← CURRENT
+Phase 4 — Docs and deployment                   PENDING
+↓
+npm run build — zero TypeScript errors
+↓
+⭐ PEER REVIEW CHECKPOINT
+   Full codebase upload to Gemini 2.5 Pro
+   Adversarial review: find flaws, not summaries
+   Fix any critical findings before proceeding
+↓
+Clone template → acme-[fake business]-voice-agent
+Fill CLIENT_INTAKE.md for fake company
+Sign up for 5 core services with real API keys
+E2E test — full call flow validated end-to-end
+↓
+⭐ DROPLET SETUP
+   DigitalOcean droplet provisioned and configured
+   Production deployment tested (not Railway free tier)
+   UptimeRobot external monitor confirmed working
+   DEPLOYMENT.md updated with droplet instructions
+   Railway vs Droplet decision documented
+↓
+✅ Ready for first real paying client
+```
+
+---
+
+## Phase 2 Bug Fixes — COMPLETE
+STATUS: COMPLETE — pushed in commit 89abe36
+
+- [x] Fix 1: Make TELNYX_API_KEY and TELNYX_PHONE_NUMBER optional in
+      config.ts — server must start without Telnyx for E2E testing
+- [x] Fix 2: Replace require() with dynamic import() in memory-client.ts
+      — ESM project, require() throws ReferenceError at runtime
+- [x] Fix 3: Add TRANSFER_PHONE_NUMBER to config.ts schema and use
+      config.TRANSFER_PHONE_NUMBER in transfer-to-human.ts
+- [x] Fix 4: Implement backchannel acknowledgment in webhook-handler.ts
+      before each tool handler fires — eliminates caller silence
+- [x] Run npm run build — confirm zero TypeScript errors
+- [x] Follow Session End Protocol — commit, push, confirm
+
+---
+
+## Phase 2.5 — Silent Failure Detection — COMPLETE
 STATUS: COMPLETE
 
-- [x] Delete src/agents/examples/ directory and all three example agents
-      (dental-receptionist.ts, real-estate-qualifier.ts, customer-support.ts)
-- [x] Rename src/agents/generic.ts → src/agents/reference-agent.ts
-- [x] Rewrite reference-agent.ts as heavily commented read-only pattern
-      document with TODO:CONFIGURE on every configurable field
-- [x] Search entire codebase for all imports and references to deleted files
-      and old generic.ts path — update or remove every one
-- [x] Update build_spec.md file manifest
-- [x] Update CLAUDE.md references
-- [x] Update README.md
-- [x] Update dev_journal.md (this file)
+Background: A systematic audit identified 6 categories of silent failure
+in the current system — places where something goes wrong but no alert
+fires, no dashboard turns red, and the problem is only discovered later
+by manually checking logs or data. This phase closes those gaps.
 
-### Phase 2 — Core fixes
-STATUS: COMPLETE
+### Task 1 — Upgrade /health to deep health check
+Current /health returns activeCalls and version only. Upgrade to probe
+all connected services on each request and return per-service status.
 
-- [x] Implement Vapi webhook HMAC-SHA256 signature verification in
-      webhook-handler.ts using VAPI_WEBHOOK_SECRET
-- [x] Add MAX_CONCURRENT_CALLS concurrency cap to webhook-handler.ts
-      with graceful 429 + Retry-After response on overflow
-- [x] Fix n8n WEBHOOK_URL in docker-compose: replace hardcoded
-      localhost:5678 with ${N8N_PUBLIC_URL:-http://localhost:5678}
-- [x] Separate n8n database from application database in docker-compose
-      (n8n uses n8n_db, application uses voice_agent)
-- [x] Add STORAGE_ENDPOINT env var to S3 client config for MinIO/AWS swap
-- [x] Create src/layers/tools/tool-utils.ts with withTimeout wrapper
-- [x] Update all existing tool handlers to use withTimeout + backchannel
-- [x] Create src/layers/tools/transfer-to-human.ts with Vapi transfer API
-- [x] Add transfer-to-human to base-agent.ts default tool list
-- [x] Create src/layers/memory/memory-client.ts interface
-- [x] Create src/layers/memory/mem0-adapter.ts implementing the interface
-- [x] Update all tools to use MemoryClient, never Mem0 SDK directly
-- [x] Add ENABLE_PINECONE and ENABLE_MEM0 feature flags to config.ts
-- [x] Gate Pinecone and Mem0 calls behind their respective flags
-- [x] Add embedding_model column to transcripts table
-- [x] Add embedding_model column to training_data table
-- [x] Create migration 007_add_recording_archived.sql
-- [x] Create migration 008_add_embedding_model_columns.sql
-- [x] Add vapi_call_id deduplication check to call-ended workflow
-- [x] Add retry-with-backoff to all n8n workflow external API nodes
-- [x] Add workflow_errors table for n8n failure logging
-- [x] Create src/lib/logger.ts structured JSON logger
-- [x] Replace all console.log with logger throughout codebase
-- [x] Add OPENAI_API_KEY as REQUIRED in .env.example with comment
-- [x] Add EMBEDDING_MODEL and EMBEDDING_DIMENSIONS to .env.example
-- [x] Populate embedding_model field when writing embeddings
+Target response shape:
+```json
+{
+  "status": "ok | degraded | down",
+  "timestamp": "ISO string",
+  "version": "1.0.0",
+  "activeCalls": 0,
+  "maxConcurrentCalls": 20,
+  "services": {
+    "supabase": { "status": "ok | degraded | down", "latencyMs": 45 },
+    "pinecone": { "status": "ok | degraded | down", "latencyMs": 120 },
+    "mem0": { "status": "ok | degraded | down", "latencyMs": 80 },
+    "n8n": { "status": "ok | degraded | down", "latencyMs": 30 }
+  }
+}
+```
 
-### Phase 3 — Template completeness
-STATUS: PENDING
+Rules:
+- Overall status = "ok" only if all enabled services are ok
+- Overall status = "degraded" if any service is slow (>2s) but reachable
+- Overall status = "down" if any required service is unreachable
+- Pinecone/Mem0 probes only run if ENABLE_PINECONE/ENABLE_MEM0 = true
+- Probe timeout: 3 seconds per service (don't let /health hang)
+- Never throw — catch all probe errors and report as "down"
 
-- [ ] Rewrite reference-agent.ts as complete pattern document:
-      - every config option present and commented
-      - TODO:CONFIGURE on every business-specific field
-      - business hours wired to both system prompt and Vapi schedule
-      - all 5 default tools included
-      - memory flags referenced
-- [ ] Create src/layers/tools/custom-tool-template.ts with full
+### Task 2 — Startup validation for TRANSFER_PHONE_NUMBER
+In scripts/setup.ts — after the connection checks, add:
+- Query the deployed agent config from Supabase
+- If the agent has TRANSFER_TO_HUMAN in its tools list AND
+  config.TRANSFER_PHONE_NUMBER is empty string, print a loud warning:
+  "⚠️  WARNING: TRANSFER_TO_HUMAN tool is enabled but
+   TRANSFER_PHONE_NUMBER is not set. Callers who ask for a human
+   will hear a failure message. Set TRANSFER_PHONE_NUMBER in .env"
+- Do not block startup — warn only
+
+### Task 3 — Stale training pipeline detection (n8n scheduled workflow)
+Create a new n8n workflow: training-pipeline-monitor.json
+
+Trigger: Schedule — runs every day at 6:00 AM
+Logic:
+1. Query Supabase calls table: count calls from the last 24 hours
+   where status = 'completed'
+2. Query Supabase training_data table: count records from last 24 hours
+3. If completed calls > 0 AND training records = 0:
+   → Insert row into workflow_errors:
+     { workflow: 'training-pipeline-monitor',
+       error: 'Training pipeline stale — calls completed but no
+               training data written in last 24 hours',
+       metadata: { calls_count, training_count } }
+4. If completed calls > 0 AND training records < (calls * 0.5):
+   → Insert row into workflow_errors with warning level
+
+Add this workflow to the workflows directory and deploy via n8n API.
+
+### Task 4 — Unarchived recordings detection (n8n scheduled workflow)
+Create a new n8n workflow: recording-archive-monitor.json
+
+Trigger: Schedule — runs every 30 minutes
+Logic:
+1. Query Supabase calls table:
+   SELECT * FROM calls
+   WHERE recording_archived = FALSE
+   AND ended_at < NOW() - INTERVAL '15 minutes'
+   AND recording_url IS NOT NULL
+2. If any rows returned:
+   → For each unarchived call, insert into workflow_errors:
+     { workflow: 'recording-archive-monitor',
+       error: 'Recording not archived',
+       call_id: [id],
+       metadata: { recording_url, ended_at } }
+3. These entries serve as the retry queue — a future recovery script
+   can query workflow_errors for this type and re-trigger archival
+
+### Task 5 — workflow_errors monitoring note
+The workflow_errors table exists (Migration 009) but nothing reads it.
+Add a comment to DEPLOYMENT.md and README under "Monitoring" section:
+"Check the workflow_errors table in Supabase weekly. A healthy system
+has zero rows. Any rows indicate silent failures requiring investigation.
+Query: SELECT * FROM workflow_errors ORDER BY created_at DESC LIMIT 50"
+
+This is an operational procedure, not a code change. Document it clearly.
+
+### Task 6 — External uptime monitor setup
+Not a code change. Add to DEPLOYMENT.md as a required production step:
+1. Register at uptimerobot.com (free tier)
+2. Create HTTP monitor pointing to: https://[your-domain]/health
+3. Check interval: 60 seconds
+4. Alert contacts: email + SMS
+5. Alert condition: status != 200 OR response body status != "ok"
+6. Document the monitor URL in the client repo for reference
+
+### Completion checklist for Phase 2.5
+- [x] /health upgraded to deep service probe with per-service status
+- [x] Startup warning for empty TRANSFER_PHONE_NUMBER
+- [x] training-pipeline-monitor.json created and added to workflows dir
+- [x] recording-archive-monitor.json created and added to workflows dir
+- [x] Both monitoring workflows deployed via n8n API in setup.ts
+- [x] workflow_errors monitoring note added to DEPLOYMENT.md
+- [x] External uptime monitor instructions added to DEPLOYMENT.md
+- [x] npm run build — zero errors
+- [x] Follow Session End Protocol — commit, push, confirm
+
+---
+
+## Phase 3 — Template Completeness
+STATUS: PENDING — start after Phase 2.5 is confirmed pushed (NEXT)
+
+- [ ] Verify reference-agent.ts has TODO:CONFIGURE on every
+      configurable field — read carefully, don't assume
+- [ ] Add custom-tool-template.ts to src/layers/tools/ with full
       three-rule pattern (backchannel + withTimeout + fallback)
-      and detailed comments on how to add client-specific tools
-- [ ] Add TODO:CONFIGURE markers to every business-specific
-      placeholder across all files
+      and detailed comments showing how to add client-specific tools
 - [ ] Add business hours enforcement to base-agent.ts:
-      both system prompt section and Vapi schedule config section
-- [ ] Create scripts/validate.ts — connection check for all services,
-      run after setup to confirm everything is reachable
+      both system prompt section AND Vapi schedule config section
+      with TODO:CONFIGURE markers on both
+- [ ] Create scripts/validate.ts — lightweight connection check,
+      faster than setup.ts, run this after every deployment to
+      confirm all services are reachable
 - [ ] Create scripts/create-outbound-call.ts stub with --phone and
       --assistant-id flags and Vapi outbound call API wiring
-- [ ] Add GET /health endpoint to Express server returning:
-      { status, timestamp, version, services: { supabase, pinecone, mem0 } }
-- [ ] Update CLIENT_INTAKE.md with memory configuration section
-      (already done — verify it's in the repo)
+      (stub only — outbound is a future feature)
+- [ ] Add npm run validate to package.json scripts
+- [ ] Add npm run create-outbound-call to package.json scripts
+- [ ] Verify all TODO:CONFIGURE markers are consistent throughout
+      Run: grep -r "TODO:CONFIGURE" src/ and review every result
+- [ ] Follow Session End Protocol — commit, push, confirm
 
-### Phase 4 — Documentation and deployment
-STATUS: PENDING
+---
+
+## Phase 4 — Documentation and Deployment
+STATUS: PENDING — start after Phase 3 is confirmed pushed
 
 - [ ] Create DEPLOYMENT.md covering:
-      - Local dev setup with ngrok
-      - Telnyx phone number → Vapi routing
-      - Setting VAPI server URL to webhook endpoint
-      - Railway deployment (railway up, env vars)
-      - n8n Cloud as alternative to self-hosted Docker
-      - Production checklist:
-        * Enable Railway volume encryption
-        * Configure log drain
-        * Rotate all API keys from template defaults
-        * Set N8N_PUBLIC_URL to production domain
-        * Verify HMAC verification is active (not bypassed)
-        * Set NODE_ENV=production
-        * Review MAX_CONCURRENT_CALLS for expected volume
+      LOCAL DEVELOPMENT:
+        - Docker compose up and what each service does
+        - ngrok setup for webhook testing
+        - How to point Vapi server URL to ngrok endpoint
+        - How to route Telnyx number to Vapi
+
+      RAILWAY DEPLOYMENT:
+        - railway login and railway link
+        - Environment variable configuration in Railway UI
+        - railway up — one command deploy
+        - Checking logs in Railway dashboard
+        - Setting NODE_ENV=production
+
+      DIGITALOCEAN DROPLET (for production/scale):
+        - Droplet size recommendation for expected call volume
+        - Ubuntu setup — Node.js, Docker, nginx
+        - SSL certificate via certbot
+        - PM2 for process management
+        - Deploying from GitHub repo
+        - Environment variable management on droplet
+        - Comparison: Railway (easy, $5/client) vs Droplet
+          (more work, cheaper at scale, more control)
+
+      N8N CLOUD ALTERNATIVE:
+        - When to use n8n cloud vs self-hosted Docker
+        - n8n cloud pricing and setup
+        - Updating N8N_BASE_URL to cloud instance
+
+      PRODUCTION CHECKLIST:
+        - [ ] NODE_ENV=production set
+        - [ ] VAPI_WEBHOOK_SECRET set (not empty)
+        - [ ] TRANSFER_PHONE_NUMBER set
+        - [ ] N8N_PUBLIC_URL set to production domain
+        - [ ] Volume encryption enabled (DigitalOcean or Railway)
+        - [ ] Log drain configured
+        - [ ] UptimeRobot monitor active on /health
+        - [ ] All API keys rotated from any shared/test values
+        - [ ] npm run validate passes against production services
+        - [ ] Test call completed successfully
+        - [ ] workflow_errors table empty after test call
+
+      MONITORING OPERATIONS:
+        - Check workflow_errors table weekly
+        - Query: SELECT * FROM workflow_errors
+                 ORDER BY created_at DESC LIMIT 50
+        - Healthy system has zero rows
+        - UptimeRobot alerts on /health failures
+
 - [ ] Create railway.toml with correct service config
-- [ ] Rewrite README.md:
-      - Agency model framing (not public open-source)
-      - Clone not fork instructions
-      - Quick start pointing to CLIENT_INTAKE.md first
-      - Add compliance notice section
-- [ ] Final consistency review of all .md files
+- [ ] Rewrite README.md to include:
+      - Monitoring section pointing to workflow_errors
+      - Updated commands including validate and create-outbound-call
+      - Droplet as production hosting option
+- [ ] Final consistency pass — all .md files match actual codebase
+- [ ] Follow Session End Protocol — commit, push, confirm
 
 ---
 
@@ -238,90 +426,85 @@ STATUS: PENDING
 - Supabase migrations 001-006 created
 - Docker compose with postgres, n8n, minio
 - README, CLAUDE.md, build_spec.md written
-- Example agents created (dental, real estate, support) — TO BE REPLACED
+- Example agents created (dental, real estate, support)
 
-### [Planning session — peer review incorporated]
-- Peer review by o3 completed
-- 17 findings reviewed and triaged
-- Architecture decisions updated based on accepted findings
-- Phase 2 expanded with: concurrency cap, backchannel pattern,
-  retry-with-backoff, feature flags, embedding model tracking
-- Phase 3 expanded with: custom tool template, memory abstraction,
-  business hours enforcement, validate script
-- Phase 4 expanded with: production checklist in DEPLOYMENT.md
-- All four .md documents rewritten to final spec
-- Ready to hand to Claude Code — start with Phase 1
+### [Planning session — architecture review]
+- Full architecture review with peer review by o3
+- 17 findings triaged, 13 accepted
+- Tech decisions documented in this journal
+- Four .md documents written to final spec
+- Phase roadmap established
 
-### [Phase 2 — Core fixes]
-- Created src/lib/logger.ts — structured JSON logger (timestamp, level, service, callId)
-- Replaced all console.log in src/ with logger calls
-- Implemented HMAC-SHA256 webhook signature verification in webhook-handler.ts
-  (crypto.timingSafeEqual, raw body capture, 401 on failure, skippable in dev)
-- Added MAX_CONCURRENT_CALLS concurrency cap with 429 + Retry-After
-- Separated n8n database (n8n_db) from app database (voice_agent) in docker-compose
-  via docker/init-db.sql init script
-- Fixed WEBHOOK_URL to use ${N8N_PUBLIC_URL:-http://localhost:5678}
-- Added STORAGE_ENDPOINT to S3 client for MinIO/AWS swap (forcePathStyle when set)
-- Created tool-utils.ts with withTimeout wrapper (Promise.race + timeout)
-- Updated all 4 tool handlers with withTimeout + fallback messages
-- Created transfer-to-human.ts using Vapi call control API
-- Added TRANSFER_TO_HUMAN to tool-definitions.ts and reference-agent.ts
-- Created memory-client.ts interface + mem0-adapter.ts implementation
-- Deleted old mem0-client.ts — all code now uses memoryClient abstraction
-- Added ENABLE_PINECONE and ENABLE_MEM0 feature flags to config.ts
-  (Zod string → boolean transform, default true)
-- Gated Pinecone in search-knowledge.ts and Mem0 in lookup-caller.ts + pipeline.ts
-- Added embedding_model to Transcript and TrainingData types
-- Pipeline now populates embedding_model from config.EMBEDDING_MODEL
-- Created migrations: 007 (recording_archived), 008 (embedding_model), 009 (workflow_errors)
-- Updated call-ended workflow with vapi_call_id deduplication check
-- Added retry-with-backoff (3 tries, exponential) to all n8n workflow HTTP nodes
-- Updated .env.example with all new vars: feature flags, embeddings, storage, concurrency
-- vector-search.ts now uses configurable EMBEDDING_MODEL and EMBEDDING_DIMENSIONS
+### [Phase 1 — Structural cleanup — COMPLETE]
+- Deleted src/agents/examples/ (3 example agents)
+- Renamed generic.ts → reference-agent.ts
+- Rewrote reference-agent.ts as read-only pattern document
+- Fixed all imports across codebase
+- Rewrote README.md for agency model
+- Updated CLAUDE.md and build_spec.md
+- Session End Protocol added to CLAUDE.md
 
-### [2026-03-26 — Pre-Phase-3 bug fixes]
-- Made TELNYX_API_KEY and TELNYX_PHONE_NUMBER optional in config.ts (not all clients need Telnyx provisioning)
-- Replaced require() with dynamic ESM import in memory-client.ts; added initMemoryClient() async init function
-  called at startup in index.ts; existing `memoryClient` export preserved via Proxy for backward compatibility
-- Added TRANSFER_PHONE_NUMBER to config schema; transfer-to-human.ts now uses config.TRANSFER_PHONE_NUMBER
-  instead of raw process.env access
-- Implemented backchannel acknowledgment in webhook-handler.ts handleFunctionCall — sends a Vapi "say" command
-  before each tool handler runs (per-tool messages defined in BACKCHANNEL_MESSAGES map)
-- Fixed pre-existing TS build error: added missing recording_archived_at to insertCall in pipeline.ts
-- Build passes with zero TypeScript errors
+### [Phase 2 — Core fixes and security — COMPLETE]
+- HMAC-SHA256 webhook signature verification implemented
+- MAX_CONCURRENT_CALLS concurrency cap implemented
+- n8n database separated from app database in docker-compose
+- N8N_PUBLIC_URL env var replaces hardcoded localhost
+- STORAGE_ENDPOINT env var added for MinIO/S3 swap
+- tool-utils.ts created with withTimeout wrapper
+- All 4 tool handlers updated with withTimeout + fallback messages
+- transfer-to-human.ts created using Vapi call control API
+- memory-client.ts interface + mem0-adapter.ts created
+- ENABLE_PINECONE and ENABLE_MEM0 feature flags added
+- logger.ts created — all console.log replaced
+- embedding_model column added to types
+- Migrations 007 (recording_archived), 008 (embedding_model),
+  009 (workflow_errors) created
+- vapi_call_id deduplication added to call-ended workflow
+- retry-with-backoff added to all n8n workflow HTTP nodes
+- Commits: 4ce5e5b (phase 1+2), 28297e2 (journal update)
 
-### [2026-03-26 — Phase 1+2 committed and pushed]
-- All Phase 1 (structural cleanup) and Phase 2 (core fixes) work committed
-  in a single commit: `phase-1+2: structural cleanup, core fixes, security hardening`
-- 31 files changed, 816 insertions, 139 deletions
-- Added Session End Protocol section to CLAUDE.md
-- Pushed to GitHub main branch — confirmed successful
+### [Phase 2 bug fixes — COMPLETE]
+- Code review identified 4 bugs:
+  1. Telnyx marked required — blocks server startup without keys
+  2. require() in ESM project — throws ReferenceError at runtime
+  3. TRANSFER_PHONE_NUMBER bypasses config validation
+  4. No backchannel acknowledgment — callers hear silence during tools
+- All 4 fixes applied in commit 89abe36
 
-### [Phase 1 — Structural cleanup]
-- Deleted SETUP_GUIDE.md (wrong audience, contradicts agency model)
-- Updated E2E_TEST_PLAN.md to reference reference-agent.ts + CLIENT_INTAKE.md
-  instead of example agents and fork workflow
-- Deleted src/agents/examples/ (dental-receptionist.ts, real-estate-qualifier.ts,
-  customer-support.ts) — replaced by single reference-agent.ts
-- Renamed generic.ts → reference-agent.ts, rewritten as heavily commented
-  read-only pattern document with TODO:CONFIGURE on every configurable field
-- Updated scripts/seed.ts — imports ReferenceAgent, seeds single agent
-- build_spec.md already correct (updated in planning session)
-- CLAUDE.md already correct (updated in planning session)
-- README.md rewritten: agency model framing, clone-not-fork, reference-agent.ts
-  pattern, compliance notice, no example agents
-- dev_journal.md Phase 1 marked COMPLETE
+### [Phase 2.5 — Silent failure detection — COMPLETE]
+- /health upgraded to deep service probe: probes Supabase, Pinecone,
+  Mem0, n8n with 3s timeout per service. Disabled services reported as
+  "disabled" without probing. Overall status: ok/degraded/down.
+- TRANSFER_PHONE_NUMBER startup warning added to setup.ts — queries
+  agent_configs for TRANSFER_TO_HUMAN tool, warns if number is empty.
+  Non-blocking, continues startup after warning.
+- training-pipeline-monitor.json: daily 6AM workflow checks if completed
+  calls have matching training data. Logs to workflow_errors if stale
+  (zero training data) or degraded (<50% coverage).
+- recording-archive-monitor.json: every 30 minutes, finds calls ended
+  >15 minutes ago with recording_url but recording_archived=false.
+  Logs each to workflow_errors as a retry queue.
+- Both monitoring workflows auto-deploy via existing setup.ts loop
+  (reads all .json from src/layers/automation/workflows/).
+- DEPLOYMENT.md created with Monitoring section (workflow_errors table
+  check instructions) and Production Checklist section (UptimeRobot
+  setup as required step, not optional).
+- npm run build: zero errors. grep console.log src/: zero results.
 
 ---
 
 ## Known Issues / Watch List
 
-- n8n WEBHOOK_URL now uses N8N_PUBLIC_URL env var (Phase 2 done)
-- Webhook HMAC verification implemented (Phase 2 done)
-- Example agents deleted — replaced by reference-agent.ts (Phase 1 done)
-- recording_archived column added — migration 007 (Phase 2 done)
-- embedding_model column added — migration 008 (Phase 2 done)
-- All console.log replaced with structured logger (Phase 2 done)
-- Concurrency cap implemented — MAX_CONCURRENT_CALLS (Phase 2 done)
-- Docker volumes need recreating after n8n DB separation — run
-  `docker compose down -v && docker compose up -d` once to reset
+- Vapi recording URLs expire — always archive to S3 before serving links.
+  Check recording_archived = TRUE before using recording_url.
+- Webhook deduplication — check vapi_call_id exists before processing
+  call.ended to prevent duplicate training data entries.
+- Tool call silence — withTimeout(5000) on all handlers is mandatory.
+  Never let a failed tool result in the caller hearing nothing.
+- n8n public URL — N8N_PUBLIC_URL in docker-compose must be set to a
+  publicly accessible URL before Vapi can deliver webhooks to n8n.
+  Use ngrok for local dev. Set N8N_PUBLIC_URL in .env.
+- workflow_errors table exists but nothing alerts on new rows — Phase 2.5
+  adds monitoring workflows to detect silent failures.
+- TRANSFER_PHONE_NUMBER defaults to empty string — if not set, transfer
+  tool fails silently. Phase 2 bug fix adds config validation warning.

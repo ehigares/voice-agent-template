@@ -1,0 +1,133 @@
+{
+  "name": "Voice Agent — Recording Archive Monitor",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "query-unarchived",
+      "name": "Query Unarchived Recordings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/calls?recording_archived=eq.false&ended_at=lt.{{ new Date(Date.now() - 900000).toISOString() }}&recording_url=not.is.null&select=id,recording_url,ended_at",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "fullResponse": false } },
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "has-unarchived",
+      "name": "Any Unarchived?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [750, 300],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "check-count",
+              "leftValue": "={{ $json.length ?? 0 }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "split-items",
+      "name": "Split Into Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1000, 200],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "insert-error",
+      "name": "Log Unarchived Recording Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/workflow_errors",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow: 'recording-archive-monitor', error: 'Recording not archived', call_id: $json.id, metadata: { recording_url: $json.recording_url, ended_at: $json.ended_at } }) }}",
+        "options": {
+          "retry": {
+            "maxTries": 3,
+            "retryIntervalMs": 1000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [[{ "node": "Query Unarchived Recordings", "type": "main", "index": 0 }]]
+    },
+    "Query Unarchived Recordings": {
+      "main": [[{ "node": "Any Unarchived?", "type": "main", "index": 0 }]]
+    },
+    "Any Unarchived?": {
+      "main": [
+        [{ "node": "Split Into Items", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Split Into Items": {
+      "main": [
+        [{ "node": "Log Unarchived Recording Error", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Log Unarchived Recording Error": {
+      "main": [[{ "node": "Split Into Items", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}
