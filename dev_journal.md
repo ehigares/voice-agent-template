@@ -596,6 +596,51 @@ STATUS: COMPLETE
   and have a working tool in under 30 minutes without guessing.
 - npm run build: zero errors.
 
+### [Peer Review Fixes — Gemini 2.5 Pro findings]
+- Fix 1: Concurrency cap now tracks unique call IDs via Set<string> instead
+  of incrementing a counter per request. Function-call webhooks for calls
+  already in the set are not counted against MAX_CONCURRENT_CALLS. Call IDs
+  are added on status-update (in-progress) and removed on end-of-call-report.
+  /health reports activeCallIds.size.
+- Fix 2: /pipeline/process endpoint now authenticates via x-pipeline-secret
+  header. PIPELINE_SECRET added to config.ts and .env.example. call-ended.json
+  sends the header from $env.PIPELINE_SECRET. Empty secret logs a warning in
+  non-production and allows through.
+- Fix 3: Deleted migration 010_fix_workflow_errors_schema.sql. Migration 009
+  already creates the table with correct column names (metadata, level).
+  Migration 010 tried to rename a non-existent column, crashing fresh installs.
+- Fix 4: Added VECTOR dimension comments to migrations 005 and 006 explaining
+  that 1536 matches text-embedding-3-small. CHECKLIST.md Section 2 updated
+  with migration note under OPENAI_API_KEY.
+- Fix 5: Added Error Trigger node to call-ended.json. On any workflow failure,
+  inserts a row into workflow_errors via Supabase REST API with workflow name,
+  error message, and failing node name.
+- Fix 6: autoTag() now accepts optional topicKeywords and outcomeKeywords
+  parameters with defaults. pipeline.ts passes custom keywords from
+  CallEndedData. reference-agent.ts has a commented TODO:CONFIGURE example
+  showing how to provide custom keywords via agent metadata.
+- Fix 7: Replaced all TODO:CONFIGURE markers in custom-tool-template.ts with
+  TEMPLATE:CONFIGURE. Added header comment explaining the distinction.
+  CHECKLIST.md Section 3 updated with note about TEMPLATE:CONFIGURE markers.
+- Fix 8: withTimeout() now creates an AbortController and passes the signal
+  to the handler function. On timeout, controller.abort() cancels in-flight
+  fetch requests. All tool handlers updated to accept the signal parameter.
+  transfer-to-human.ts and custom-tool-template.ts pass signal to fetch().
+- Fix 9: Updated speaker mapping comment in transcribe.ts with Vapi-specific
+  knowledge: agent typically speaks first via firstMessage, making it Speaker A.
+  Did not change the mapping — left as TODO:CONFIGURE for deployer verification.
+- Fix 10: Fixed build_spec.md Section 15 — changed EMBEDDING_MODEL from
+  text-embedding-ada-002 to text-embedding-3-small to match config.ts and
+  .env.example.
+- Fix 11: Added postgres password security note to DEPLOYMENT.md under
+  DigitalOcean Droplet section. Warns to change default password and block
+  port 5432 via UFW.
+- Verification: npm run build zero errors. grep TODO:CONFIGURE src/ shows
+  only reference-agent.ts, transfer-to-human.ts, transcribe.ts (expected).
+  custom-tool-template.ts no longer appears. grep localhost:3000 returns
+  zero results in src/, n8n/, scripts/.
+- n8n/workflows/call-ended.json backup synced with src copy.
+
 ---
 
 ## Known Issues / Watch List
