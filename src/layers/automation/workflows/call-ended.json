@@ -89,7 +89,7 @@
       "position": [1000, 400],
       "parameters": {
         "method": "POST",
-        "url": "http://localhost:3000/pipeline/process",
+        "url": "={{ $env.WEBHOOK_BASE_URL }}/pipeline/process",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Webhook Trigger').first().json.body) }}",

@@ -36,7 +36,12 @@ export async function transcribeRecording(
 
   const utterances = transcript.utterances ?? [];
   return utterances.map((u) => ({
-    speaker: u.speaker === 'A' ? 'agent' : 'caller',
+    // TODO:CONFIGURE — Speaker label assignment depends on your telephony setup.
+    // For most inbound calls the caller speaks first (Speaker A = caller).
+    // Verify this is correct by checking a test call transcript.
+    // If agent speaks first (e.g. Vapi plays greeting before recording starts),
+    // swap this to: u.speaker === 'A' ? 'agent' : 'caller'
+    speaker: u.speaker === 'A' ? 'caller' : 'agent',
     text: u.text,
     start_ms: u.start,
     end_ms: u.end,

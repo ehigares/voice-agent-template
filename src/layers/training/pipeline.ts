@@ -1,6 +1,6 @@
 import { logger } from '../../lib/logger.js';
 import { config } from '../../config.js';
-import { insertCall, upsertCaller, insertTranscript, insertTrainingData } from '../memory/queries.js';
+import { insertCall, updateCall, upsertCaller, insertTranscript, insertTrainingData } from '../memory/queries.js';
 import { memoryClient } from '../memory/memory-client.js';
 import { generateEmbedding } from '../memory/vector-search.js';
 import { uploadRecording } from './s3-upload.js';
@@ -72,12 +72,14 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
   }
 
   // Step 3: Upload recording to S3
+  // Track the S3 URL so we can use it for transcription instead of the Vapi URL.
+  // Vapi recording URLs expire — S3 URLs are permanent.
+  let archivedRecordingUrl: string | null = null;
   if (data.recording_url) {
     try {
       const s3Key = await uploadRecording(data.call_id, data.recording_url);
       // Mark recording as archived
       try {
-        const { updateCall } = await import('../memory/queries.js');
         await updateCall(callRecord.id, {
           s3_key: s3Key,
           recording_archived: true,
@@ -86,6 +88,10 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
       } catch {
         // Non-critical — s3Key is still stored
       }
+      // Build the S3 URL for transcription — use storage endpoint for MinIO, standard S3 URL otherwise
+      archivedRecordingUrl = config.STORAGE_ENDPOINT
+        ? `${config.STORAGE_ENDPOINT}/${config.S3_BUCKET}/${s3Key}`
+        : `https://${config.S3_BUCKET}.s3.${config.AWS_REGION}.amazonaws.com/${s3Key}`;
       logger.info('pipeline', `Uploaded to S3: ${s3Key}`, { callId: data.call_id });
     } catch (err) {
       logger.error('pipeline', 'Failed to upload recording', {
@@ -96,10 +102,12 @@ export async function processCallEnd(data: CallEndedData): Promise<void> {
   }
 
   // Step 4: Transcribe
+  // Prefer the S3 URL (permanent) over the Vapi recording URL (expires)
   let segments: TranscriptSegment[] = [];
-  if (data.recording_url) {
+  const transcriptionUrl = archivedRecordingUrl ?? data.recording_url;
+  if (transcriptionUrl) {
     try {
-      segments = await transcribeRecording(data.recording_url);
+      segments = await transcribeRecording(transcriptionUrl);
       logger.info('pipeline', `Transcribed ${segments.length} segments`, { callId: data.call_id });
     } catch (err) {
       logger.error('pipeline', 'Failed to transcribe', {

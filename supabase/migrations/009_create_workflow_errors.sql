@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS workflow_errors (
   call_id TEXT,
   workflow TEXT NOT NULL,
   error TEXT NOT NULL,
-  context JSONB DEFAULT '{}',
+  level TEXT DEFAULT 'error',
+  metadata JSONB DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

@@ -9,6 +9,7 @@ import { checkAvailability } from '../tools/check-availability.js';
 import { bookAppointment } from '../tools/book-appointment.js';
 import { transferToHuman } from '../tools/transfer-to-human.js';
 import { triggerWebhook } from '../automation/n8n-client.js';
+import { processCallEnd } from '../training/pipeline.js';
 import type { VapiServerMessage, VapiServerMessageResponse } from './vapi-types.js';
 import type { ToolResult } from '../../types/index.js';
 
@@ -116,7 +117,20 @@ async function probeN8n(): Promise<void> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
+// ---- Health Check Cache ----
+// Cache results for 10 seconds to avoid hammering downstream services.
+// 10s (not 30s) because Railway checks health rapidly during deploys —
+// a stale "down" result could cause Railway to reject a good deployment.
+const HEALTH_CACHE_TTL_MS = 10_000;
+let healthCache: { result: Record<string, unknown>; timestamp: number } | null = null;
+
 app.get('/health', async (_req: Request, res: Response) => {
+  // Return cached result if fresh enough
+  if (healthCache && Date.now() - healthCache.timestamp < HEALTH_CACHE_TTL_MS) {
+    res.json(healthCache.result);
+    return;
+  }
+
   const services: Record<string, ServiceHealth | { status: 'disabled' }> = {};
 
   // Supabase is always required
@@ -142,9 +156,15 @@ app.get('/health', async (_req: Request, res: Response) => {
     services.mem0 = { status: 'disabled' };
   }
 
-  probes.push(
-    probeService('n8n', probeN8n).then((r) => { services.n8n = r; })
-  );
+  // Only probe n8n if an API key is configured — without a key the probe
+  // will always fail, producing false "down" alerts
+  if (config.N8N_API_KEY) {
+    probes.push(
+      probeService('n8n', probeN8n).then((r) => { services.n8n = r; })
+    );
+  } else {
+    services.n8n = { status: 'disabled' };
+  }
 
   await Promise.all(probes);
 
@@ -164,14 +184,17 @@ app.get('/health', async (_req: Request, res: Response) => {
     status = 'ok';
   }
 
-  res.json({
+  const result = {
     status,
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version ?? '0.0.0',
     activeCalls,
     maxConcurrentCalls: config.MAX_CONCURRENT_CALLS,
     services,
-  });
+  };
+
+  healthCache = { result, timestamp: Date.now() };
+  res.json(result);
 });
 
 // Main Vapi webhook endpoint
@@ -356,6 +379,24 @@ async function handleEndOfCall(body: VapiServerMessage): Promise<void> {
     });
   }
 }
+
+// Called by n8n call-ended workflow — URL must match WEBHOOK_BASE_URL in .env
+app.post('/pipeline/process', async (req: Request, res: Response) => {
+  try {
+    await processCallEnd(req.body);
+    logger.info('pipeline-route', 'Pipeline processing complete', {
+      callId: req.body?.call_id,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('pipeline-route', 'Pipeline processing failed', {
+      callId: req.body?.call_id,
+      error: message,
+    });
+    res.status(500).json({ error: message });
+  }
+});
 
 export function startServer(): void {
   const port = config.WEBHOOK_PORT;

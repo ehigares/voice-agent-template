@@ -35,12 +35,14 @@ Never fork — always clone and push to a new private remote.
 ## Starting a New Client Build
 
 1. Read `CLIENT_INTAKE.md` fully before writing any code
-2. Read `src/agents/reference-agent.ts` to understand the agent pattern
-3. Create `src/agents/[client-name]-agent.ts` modeled on the reference agent
-4. Run `grep -r "TODO:CONFIGURE" src/` and resolve every result using the
+2. Read `CHECKLIST.md` — the definitive list of everything that must be
+   configured. Work through all three sections.
+3. Read `src/agents/reference-agent.ts` to understand the agent pattern
+4. Create `src/agents/[client-name]-agent.ts` modeled on the reference agent
+5. Run `grep -r "TODO:CONFIGURE" src/` and resolve every result using the
    intake document
-5. Verify `ENABLE_PINECONE` and `ENABLE_MEM0` flags match client needs
-6. Update `dev_journal.md` with what was built and any decisions made
+6. Verify `ENABLE_PINECONE` and `ENABLE_MEM0` flags match client needs
+7. Update `dev_journal.md` with what was built and any decisions made
 
 Never modify `reference-agent.ts` — it is a read-only pattern document.
 
@@ -109,11 +111,19 @@ Default: 20. Adjust per Railway instance size.
 3. Every tool must send a backchannel acknowledgment immediately before
    doing async work so the caller never hears silence
 
-Backchannel pattern (required on every tool):
+Backchannel pattern (handled in webhook-handler.ts via BACKCHANNEL_MESSAGES):
 ```typescript
-// Send immediately — before any async operation
-await vapiClient.sendBackchannel(callId, "Let me check that for you...");
-// Now do the actual work
+// Backchannel is sent automatically before each tool handler fires.
+// The pattern uses Vapi's call control API directly:
+await fetch(`https://api.vapi.ai/call/${callId}/control`, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${config.VAPI_API_KEY}`,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ type: 'say', message: 'Let me check that for you...' }),
+});
+// Then the tool handler runs inside withTimeout:
 const result = await withTimeout(5000, FALLBACK_MSG, () => doWork());
 ```
 
